@@ -1,3 +1,5 @@
+// This page is to show live race data for the current race day
+
 import { Link } from "react-router-dom";
 
 function Raceday() {

@@ -1,3 +1,5 @@
+// This is the main application home page
+
 import { Link } from "react-router-dom";
 
 function Home() {

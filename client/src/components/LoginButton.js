@@ -1,4 +1,5 @@
 // This component displays a Log In/Log out button in the page header. It's status is dependant on the user being successfully authenticated by auth0
+// Note auth0 is not currently implemented.
 
 import "./LoginButton.css";
 // import { useAuth0 } from "@auth0/auth0-react";
