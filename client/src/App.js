@@ -18,6 +18,7 @@ function App() {
           <Route path="raceday" element={<Raceday />} />
           <Route path="racedata" element={<Racedata />} />
           <Route path="about" element={<About />} />
+          <Route path="*" element={<Home />} />
         </Routes>
       </div>
     </>
