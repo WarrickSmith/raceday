@@ -1,20 +1,26 @@
-import { Routes, Route, Link } from "react-router-dom";
-import logo from "./logo.svg";
+// Main RaceDay application page with routes to application sub pages
+
+import { Routes, Route } from "react-router-dom";
 import "./App.css";
+import Header from "./components/Header";
 import Home from "./pages/Home";
+import Raceday from "./pages/Raceday";
+import Racedata from "./pages/Racedata";
 import About from "./pages/About";
 
 function App() {
   return (
-    <div className="App">
-      <header>
-        <h1>RaceDay!</h1>
+    <>
+      <Header />
+      <div className="App">
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="raceday" element={<Raceday />} />
+          <Route path="racedata" element={<Racedata />} />
           <Route path="about" element={<About />} />
         </Routes>
-      </header>
-    </div>
+      </div>
+    </>
   );
 }
 
