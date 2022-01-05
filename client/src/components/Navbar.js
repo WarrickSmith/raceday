@@ -1,15 +1,16 @@
 // This component shows a consistent header at the tope of the application page with links to live racing and race data
 
-import "./Header.css";
+import "./Navbar.css";
 import { Link } from "react-router-dom";
 import Logo from "../logo.png";
 import LoginButton from "./LoginButton";
 
-const Header = () => {
+const Navbar = () => {
+  console.log("Navbar Component Rendered!");
   return (
-    <header className="header">
+    <header className="navbar">
       <div className="container">
-        <Link to="/" className="header-title">
+        <Link to="/" className="navbar-title">
           <img src={Logo} alt="company logo" width="100" />
         </Link>
         <ul className="nav">
@@ -42,4 +43,4 @@ const Header = () => {
   );
 };
 
-export default Header;
+export default Navbar;

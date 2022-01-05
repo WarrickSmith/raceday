@@ -1,6 +1,6 @@
 /* Header component styling */
 
-.header {
+.navbar {
   background: #3f3f3f;
   padding: 1rem 0;
   text-align: center;
@@ -12,7 +12,7 @@
   display: grid;
   grid-template-columns: 1fr 2fr;
 }
-.header-title {
+.navbar-title {
   margin: 0;
   font-size: 1.5rem;
   font-weight: bold;
@@ -20,13 +20,13 @@
   display: inline-block;
 }
 
-.header a {
+.navbar a {
   color: inherit;
   text-decoration: none;
 }
 
-.header a:active,
-.header a:hover {
+.navbar a:active,
+.navbar a:hover {
   color: #cbeb15;
   text-decoration: underline;
 }
@@ -64,7 +64,7 @@
 }
 
 @media only screen and (min-width: 40rem) {
-  .header .container {
+  .navbar .container {
     display: grid;
     grid-template-columns: 10rem auto;
     align-items: center;
