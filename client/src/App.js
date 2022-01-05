@@ -1,6 +1,6 @@
 // Main RaceDay application page with routes to application sub pages
 
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 import "./App.css";
 import Navbar from "./components/Navbar";
 import Home from "./pages/Home";
@@ -11,8 +11,7 @@ import About from "./pages/About";
 function App() {
   console.log("App Component Rendered");
   return (
-    // <>
-    <Router>
+    <>
       <Navbar />
       <div className="App">
         <Routes>
@@ -23,8 +22,7 @@ function App() {
           <Route path="*" element={<Home />} />
         </Routes>
       </div>
-    </Router>
-    // </>
+    </>
   );
 }
 
