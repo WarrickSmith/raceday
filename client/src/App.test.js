@@ -1,8 +1,19 @@
-import { render, screen } from '@testing-library/react';
-import App from './App';
+import { render, screen } from "@testing-library/react";
+import App from "./App";
 
-test('renders learn react link', () => {
-  render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
+// Test rendering main app web page routes
+describe("<App />", () => {
+  // Render Home page (default app page) - /home
+
+  it("Renders default home page / (Home) correctly", () => {
+    render(<App />);
+    const pageText = screen.getByText(/RaceDay Analysis/i);
+    expect(pageText).toBeInTheDocument();
+  });
+
+  // Render Live Racing page - /raceday
+
+  // Render Race Data page - /racedata
+
+  // Render About page - //about
 });
