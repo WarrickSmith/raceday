@@ -1,0 +1,23 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "description": "RaceDay API Server",
+  "main": "app.js",
+  "scripts": {
+    "start": "nodemon src/server.js",
+    "test": "jest --verbose ./src",
+    "test:e2e": "jest --verbose ./e2e",
+    "test:watch": "jest --watch"
+  },
+  "author": "Warrick Smith",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.17.2",
+    "node-fetch": "^2.6.6",
+    "nodemon": "^2.0.15"
+  },
+  "devDependencies": {
+    "jest": "^27.4.7"
+  }
+}
