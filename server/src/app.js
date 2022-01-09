@@ -16,9 +16,19 @@ app.get("/", async (request, response) => {
     .send("This is a default route with no information!!");
 });
 
+// Race Meetings endpoint - Return an object containing tody's race meetings in detail
 app.get("/racemeetings", async (request, response) => {
   const result = await getRaceMeetings();
-  return response.status(200).send(result);
+  if (result.meetings) return response.status(200).send(result);
+  else if (result.error) {
+    return response.status(503).send({
+      error: "A problem occured with the API Server fetching Race Meeting Data",
+    });
+  } else {
+    return response
+      .status(404)
+      .send({ error: "No response was received form the Server" });
+  }
 });
 
 module.exports = app;
