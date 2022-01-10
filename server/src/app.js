@@ -21,13 +21,14 @@ app.get("/racemeetings", async (request, response) => {
   const result = await getRaceMeetings();
   if (result.meetings) return response.status(200).send(result);
   else if (result.error) {
-    return response.status(503).send({
-      error: "A problem occured with the API Server fetching Race Meeting Data",
-    });
+    return response.status(503).send(result);
   } else {
-    return response
-      .status(404)
-      .send({ error: "No response was received form the Server" });
+    return response.status(404).send({
+      error: {
+        code: "RESOURCE_NOT_FOUND_ERROR",
+        message: "No response was received from the Server",
+      },
+    });
   }
 });
 
