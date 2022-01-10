@@ -10,7 +10,7 @@ const getAllRaces = async (meetingUrl) => {
   try {
     // Fetch object containing races for 'today'
     console.log("\x1b[36m%s\x1b[0m", "module - fetching todays Race data...");
-    let result = await fetch(meetingUrl);
+    const result = await fetch(meetingUrl);
     const races = await result.json();
     console.log("\x1b[36m%s\x1b[0m", "All Races Fetched");
     return races;
