@@ -37,7 +37,8 @@ const getRaceMeetings = async () => {
     return {
       error: {
         code: "SERVICE_UNAVAILABLE_ERROR",
-        message: "No response was received from TAB Corp API the Server",
+        message:
+          "No response was received from TAB Corp API the Server for getRaceMeetings",
       },
     };
   }

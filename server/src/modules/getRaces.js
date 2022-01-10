@@ -20,8 +20,11 @@ const getRaces = async (meetingUrl) => {
       "An API Server error has occurred fetching Races Data in module 'getRaces'"
     );
     return {
-      error:
-        "An API Server error has occurred fetching Races Data in module 'getRaces'",
+      error: {
+        code: "SERVICE_UNAVAILABLE_ERROR",
+        message:
+          "No response was received from TAB Corp API the Server for getRaces",
+      },
     };
   }
 };
