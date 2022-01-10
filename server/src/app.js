@@ -33,7 +33,7 @@ app.get("/racemeetings", async (request, response) => {
   }
 });
 
-// All Races endpoint - Return an object containing all of today's races
+// All Races endpoint - Return an object containing all of today's races for a single meeting
 app.get("/allraces/:url", async (request, response) => {
   const url = request.params.url;
   console.log("received URL parameter: ", url);
