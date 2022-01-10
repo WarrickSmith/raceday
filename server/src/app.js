@@ -6,6 +6,7 @@ const app = express();
 // Project Module, Schema & Utils imports
 const getRaceMeetings = require("./modules/getRaceMeetings.js");
 const getAllRaces = require("./modules/getAllRaces");
+const getRace = require("./modules/getRace");
 
 app.use(cors()); // Prevent CORS error on client web browser
 app.use(express.json());
@@ -36,9 +37,27 @@ app.get("/racemeetings", async (request, response) => {
 // All Races endpoint - Return an object containing all of today's races for a single meeting
 app.get("/allraces/:url", async (request, response) => {
   const url = request.params.url;
-  console.log("received URL parameter: ", url);
+  console.log("received all races URL parameter: ", url);
   const result = await getAllRaces(url);
   if (result.races) return response.status(200).send(result);
+  else if (result.error) {
+    return response.status(503).send(result);
+  } else {
+    return response.status(404).send({
+      error: {
+        code: "RESOURCE_NOT_FOUND_ERROR",
+        message: "No response was received from the Server",
+      },
+    });
+  }
+});
+
+// A Single Race endpoint - Return an object containing details for a single race
+app.get("/race/:url", async (request, response) => {
+  const url = request.params.url;
+  console.log("received single race URL parameter: ", url);
+  const result = await getRace(url);
+  if (result.raceNumber) return response.status(200).send(result);
   else if (result.error) {
     return response.status(503).send(result);
   } else {
