@@ -8,7 +8,7 @@ import LoginButton from "./LoginButton";
 const Navbar = () => {
   console.log("Navbar Component Rendered!");
   return (
-    <header className="navbar">
+    <nav className="navbar">
       <div className="container">
         <Link to="/" className="navbar-title">
           <img src={Logo} alt="company logo" width="100" />
@@ -39,7 +39,7 @@ const Navbar = () => {
           </li>
         </ul>
       </div>
-    </header>
+    </nav>
   );
 };
 
