@@ -7,6 +7,10 @@ import Logo from "../logo.png";
 import LoginButton from "./LoginButton";
 import { MdClose } from "react-icons/md";
 import { FiMenu } from "react-icons/fi";
+import { FaHome } from "react-icons/fa";
+import { FaHorseHead } from "react-icons/fa";
+import { FaDatabase } from "react-icons/fa";
+import { FaInfoCircle } from "react-icons/fa";
 
 const Navbar = () => {
   console.log("Navbar Component Rendered!");
@@ -41,27 +45,27 @@ const Navbar = () => {
       <ul className={`menunav ${navbarOpen ? " showMenu" : ""}`}>
         <li className="nav-item">
           <Link to="/" className="nav-link" onClick={() => closeMenu()}>
-            Home
+            <FaHome className="icon" /> Home
           </Link>
         </li>
         <li className="nav-item">
           <Link to="/raceday" className="nav-link" onClick={() => closeMenu()}>
-            Live Racing
+            <FaHorseHead className="icon" /> Live Racing
           </Link>
         </li>
         <li className="nav-item">
           <Link to="/racedata" className="nav-link" onClick={() => closeMenu()}>
-            Race Data
+            <FaDatabase className="icon" /> Race Data
           </Link>
         </li>
         <li className="nav-item">
           <Link to="/about" className="nav-link" onClick={() => closeMenu()}>
-            About
+            <FaInfoCircle className="icon" /> About
           </Link>
         </li>
-        <li className="nav-item" onClick={() => closeMenu()}>
+        {/* <li className="nav-item" onClick={() => closeMenu()}>
           <LoginButton />
-        </li>
+        </li> */}
       </ul>
     </nav>
   );
