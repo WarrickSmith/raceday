@@ -30,6 +30,7 @@
 }
 .menunav {
   display: none;
+  transition: all 5s ease;
 }
 
 .menunav.showMenu {
@@ -43,6 +44,8 @@
   margin: 0;
   padding: 0;
   align-items: flex-start;
+  opacity: 0.9;
+  transition: all 5s ease;
 }
 
 .nav-item {
@@ -56,28 +59,30 @@
   color: white;
   white-space: nowrap;
   text-decoration: none;
+  padding: 0.5rem 0.75rem;
+  margin: 0;
 }
 
 .nav-link:hover {
   color: lightskyblue;
+  background: grey;
+  border-radius: 0.4rem;
+  transition: all 0.25s ease;
 }
 
 /* Media query - Show top menu at > 30rem */
 /* Hide the menu burger and re-align the navigation UL items */
 
-@media only screen and (min-width: 30rem) {
+@media only screen and (min-width: 51.25rem) {
   .btn-burger {
     display: none;
   }
 
   .menunav {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-around;
-  }
-
-  .nav-link {
-    padding: 0 0.7rem;
+    display: grid;
+    grid-template-columns: repeat(5, auto);
+    justify-content: right;
+    width: 100%;
+    grid-gap: 1rem;
   }
 }
