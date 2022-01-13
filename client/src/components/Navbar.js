@@ -24,7 +24,12 @@ const Navbar = () => {
   return (
     <nav className="navbar">
       <Link to="/" className="navbar-logo">
-        <img src={Logo} alt="company logo" width="75" />
+        <img
+          src={Logo}
+          alt="company logo"
+          width="75"
+          onClick={() => closeMenu()}
+        />
       </Link>
       <button className="btn-burger" onClick={handleToggle}>
         {navbarOpen ? (
