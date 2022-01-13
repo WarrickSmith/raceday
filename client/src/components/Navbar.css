@@ -63,6 +63,8 @@
 }
 
 /* Media query - Show top menu at > 30rem */
+/* Hide the menu burger and re-align the navigation UL items */
+
 @media only screen and (min-width: 30rem) {
   .btn-burger {
     display: none;
@@ -76,9 +78,6 @@
   }
 
   .nav-link {
-    color: white;
-    white-space: nowrap;
-    text-decoration: none;
-    padding: 0 0.5rem;
+    padding: 0 0.7rem;
   }
 }
