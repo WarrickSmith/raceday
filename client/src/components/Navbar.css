@@ -1,80 +1,83 @@
-/* Header component styling */
+/* Navigation Bar component styling */
 
 .navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 7rem;
+  border-bottom: 0.25rem solid purple;
   background: #3f3f3f;
-  padding: 1rem 0;
-  text-align: center;
-  margin-bottom: 3rem;
+}
+
+.navbar-logo {
+  padding: 1rem;
+}
+
+.btn-burger {
+  position: absolute;
+  right: 1rem;
+  cursor: pointer;
+  background: #3f3f3f;
+  color: white;
+  border: none;
   color: white;
 }
 
-.container {
-  display: grid;
-  grid-template-columns: 1fr 2fr;
+.burger {
+  width: 2.5rem;
+  height: 2.5rem;
 }
-.navbar-title {
-  margin: 0;
-  font-size: 1.5rem;
-  font-weight: bold;
-  max-width: 10rem;
-  display: inline-block;
+.menunav {
+  display: none;
 }
 
-.navbar a {
-  color: inherit;
+.menunav.showMenu {
+  width: 30%;
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  top: 5rem;
+  right: 0;
+  background: #3f3f3f;
+  margin: 0;
+  padding: 0;
+  align-items: flex-start;
+}
+
+.nav-item {
+  list-style-type: none;
+  font-size: 1.5rem;
+  padding: 0.5rem;
   text-decoration: none;
 }
 
-.navbar a:active,
-.navbar a:hover {
-  color: #cbeb15;
-  text-decoration: underline;
-}
-
-.nav,
-.nav-item {
-  margin: 0;
-  padding: 0;
-  list-style-type: none;
-}
-
-.nav {
-  width: 100%;
-}
-
-.nav-item {
-  margin-top: 0.5rem;
-  width: 100%;
-  display: block;
-}
-
 .nav-link {
+  color: white;
   white-space: nowrap;
+  text-decoration: none;
 }
+
+.nav-link:hover {
+  color: lightskyblue;
+}
+
+/* Media query - Show top menu at > 30rem */
+/* Hide the menu burger and re-align the navigation UL items */
 
 @media only screen and (min-width: 30rem) {
-  .nav {
-    width: 100%;
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
-    gap: 1rem;
-    place-items: center;
-    justify-content: center;
+  .btn-burger {
+    display: none;
   }
-}
 
-@media only screen and (min-width: 40rem) {
-  .navbar .container {
-    display: grid;
-    grid-template-columns: 10rem auto;
+  .menunav {
+    display: flex;
+    flex-direction: row;
     align-items: center;
+    justify-content: space-around;
   }
 
-  .nav {
-    justify-content: end;
-  }
-
-  .nav-item {
-    margin-left: 1rem;
+  .nav-link {
+    padding: 0 0.7rem;
   }
 }

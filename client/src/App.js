@@ -2,6 +2,8 @@
 
 import { Routes, Route } from "react-router-dom";
 import "./App.css";
+
+// Import modules used for navigation header and page routing
 import Navbar from "./components/Navbar";
 import Home from "./pages/Home";
 import Raceday from "./pages/Raceday";
