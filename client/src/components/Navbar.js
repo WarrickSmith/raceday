@@ -4,7 +4,6 @@ import "./Navbar.css";
 import { Link } from "react-router-dom";
 import React, { useState } from "react";
 import Logo from "../logo.png";
-import LoginButton from "./LoginButton";
 import { MdClose } from "react-icons/md";
 import { FiMenu } from "react-icons/fi";
 import { FaHome } from "react-icons/fa";
@@ -63,9 +62,6 @@ const Navbar = () => {
             <FaInfoCircle className="icon" /> About
           </Link>
         </li>
-        {/* <li className="nav-item" onClick={() => closeMenu()}>
-          <LoginButton />
-        </li> */}
       </ul>
     </nav>
   );
