@@ -1,12 +1,14 @@
-// Service to Connect to the Australian TAB API and query all race meeting for 'today'
-// REf API Link: "meetings": "https://api.beta.tab.com.au/v1/tab-info-service/racing/dates/YYYY-MM-DD/meetings?jurisdiction=NSW"
+// Unit test to check getRaceMeetings is obtaing an object containinag race meeting data for 'today' from the API Server /racemeetings endpoint.
 
-// Declare variable for todays date and an array to store 'Meetinsg' data
+import getRaceMeetings from "./getRaceMeetings";
 
-// Assign todays date to a variable
+describe("Unit Test for service-moduler getRaceMeetings", () => {
+  // Test racemeetings object get returned from API server endpoint \racemeetings
 
-// Build query string using todays date
-
-// Query meetings data using GET 'query string' and assign to meeting data array.
-
-// return Meeting Data array
+  it("Should fetch and return an object containing racemeetings data from API Servr \racemeetings", async () => {
+    // test getRaces function returns an object with the 'meetingName' key to confirm data is present in the object returned.
+    const received = await getRaceMeetings();
+    console.log(`Data Received: ${received}`);
+    expect(received).toHaveProperty("meetings[0].meetingName");
+  });
+});
