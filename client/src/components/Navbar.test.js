@@ -2,7 +2,7 @@ import { BrowserRouter as Router } from "react-router-dom";
 import { render, screen, fireEvent } from "@testing-library/react";
 import App from "../App";
 
-// Integration Test - navbar rendering and links
+// Integration Test - navbar rendering and Routes
 describe("Component - Navbar />", () => {
   // Render navbar
 
@@ -13,7 +13,7 @@ describe("Component - Navbar />", () => {
       </Router>
     );
 
-    // Check all navigation bar linkable element have rendered
+    // Check all navigation bar linkable elements have rendered
     let result = screen.getByText(/Home/i);
     expect(result).toBeTruthy();
     result = screen.getByText(/Live Racing/i);
@@ -28,7 +28,7 @@ describe("Component - Navbar />", () => {
     expect(result).toBeTruthy();
   });
 
-  // check Navbar functionality by clicking links
+  // check Navbar functionality by clicking links and verifying route render correct pages
   it("Renders pages correcly when nav links clicked", async () => {
     await render(
       <Router>
