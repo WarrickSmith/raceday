@@ -1,6 +1,5 @@
-import * as React from "React";
 import { BrowserRouter as Router } from "react-router-dom";
-import { render, screen, fireEvent, getByText } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import App from "./App";
 
 // Integration Test - rendering main app web page
@@ -13,14 +12,13 @@ describe("<App />", () => {
         <App />
       </Router>
     );
-    let result = screen.getByText(/Done!/i);
-    expect(result).toBeTruthy();
-    result = screen.getByText(/Home/i);
+
+    // Check navigation bar has rendered
+    let result = screen.getByText(/Home/i);
     expect(result).toBeTruthy();
 
-    fireEvent.click(screen.getByText("Live Racing"));
-    result = screen.getByText(/RaceDay/i);
+    // Check default home page content has rendered
+    result = screen.getByText(/RaceDay Analysis/i);
     expect(result).toBeTruthy();
-    console.log(result);
   });
 });
