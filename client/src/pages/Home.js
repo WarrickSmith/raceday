@@ -10,9 +10,6 @@ function Home() {
         <h2>RaceDay Analysis</h2>
         <RaceMeetings />
       </main>
-      <nav>
-        <Link to="/about">About</Link>
-      </nav>
     </>
   );
 }

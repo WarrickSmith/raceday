@@ -8,9 +8,6 @@ function Racedata() {
       <main>
         <h2>RaceData</h2>
       </main>
-      <nav>
-        <Link to="/">Home</Link>
-      </nav>
     </>
   );
 }

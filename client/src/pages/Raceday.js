@@ -8,9 +8,6 @@ function Raceday() {
       <main>
         <h2>RaceDay</h2>
       </main>
-      <nav>
-        <Link to="/">Home</Link>
-      </nav>
     </>
   );
 }
