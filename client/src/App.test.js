@@ -1,19 +1,26 @@
-import { render, screen } from "@testing-library/react";
+import * as React from "React";
+import { BrowserRouter as Router } from "react-router-dom";
+import { render, screen, fireEvent, getByText } from "@testing-library/react";
 import App from "./App";
 
-// Test rendering main app web page routes
+// Integration Test - rendering main app web page
 describe("<App />", () => {
   // Render Home page (default app page) - /home
 
   it("Renders default home page / (Home) correctly", () => {
-    render(<App />);
-    const pageText = screen.getByText(/RaceDay Analysis/i);
-    expect(pageText).toBeInTheDocument();
+    render(
+      <Router>
+        <App />
+      </Router>
+    );
+    let result = screen.getByText(/Done!/i);
+    expect(result).toBeTruthy();
+    result = screen.getByText(/Home/i);
+    expect(result).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Live Racing"));
+    result = screen.getByText(/RaceDay/i);
+    expect(result).toBeTruthy();
+    console.log(result);
   });
-
-  // Render Live Racing page - /raceday
-
-  // Render Race Data page - /racedata
-
-  // Render About page - //about
 });
