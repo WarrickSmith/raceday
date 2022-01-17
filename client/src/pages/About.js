@@ -1,7 +1,5 @@
 // This page is for information about the application and developer
 
-import { Link } from "react-router-dom";
-
 function About() {
   return (
     <>
