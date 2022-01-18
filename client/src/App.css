@@ -1,3 +1,12 @@
+/* Main App css, focused on formatting containers and page layout not react component specific css. */
+
+/* Remove default padding and margin on all elements */
+* {
+  padding: 0;
+  margin: 0;
+}
+
+/* Default text Alignment */
 .App {
   text-align: center;
 }
