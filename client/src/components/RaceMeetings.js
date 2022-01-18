@@ -24,7 +24,7 @@ const RaceMeetings = () => {
   if (meetings === undefined) {
     return (
       <div>
-        <h2>Fetching race Meetings for Today...</h2>
+        <h2>Fetching Race Meetings for Today...</h2>
         <img
           src={"loading.gif"}
           alt={"loading placeholder"}
@@ -36,14 +36,24 @@ const RaceMeetings = () => {
   } else
     console.log(`"meetings" Length for element mapping is: `, meetings.length);
   return (
-    <div>
-      <h3>Todays Meetings</h3>
-      <ol>
-        {meetings.map((meeting, index) => (
-          <li key={index}>{meeting.meetingName}</li>
-        ))}
-      </ol>
-    </div>
+    <>
+      <div>
+        <h3>Todays Meetings</h3>
+        <ol>
+          {meetings.map((meeting, index) => (
+            <li key={index}>{meeting.meetingName}</li>
+          ))}
+        </ol>
+      </div>
+      <div>
+        <h3>Todays Locations</h3>
+        <ol>
+          {meetings.map((meeting, index) => (
+            <li key={index}>{meeting.location}</li>
+          ))}
+        </ol>
+      </div>
+    </>
   );
 };
 
