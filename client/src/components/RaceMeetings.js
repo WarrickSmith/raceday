@@ -3,6 +3,7 @@
 // Import dependancies
 import { useState, useEffect } from "react";
 import getRaceMeetings from "../services/getRaceMeetings";
+import "./RaceMeetings.css";
 
 // Get race meetings data
 const RaceMeetings = () => {
@@ -26,6 +27,7 @@ const RaceMeetings = () => {
       <div>
         <h2>Fetching Race Meetings for Today...</h2>
         <img
+          className="spinner"
           src={"loading.gif"}
           alt={"loading placeholder"}
           width={270}
@@ -37,21 +39,31 @@ const RaceMeetings = () => {
     console.log(`"meetings" Length for element mapping is: `, meetings.length);
   return (
     <>
-      <div>
-        <h3>Todays Meetings</h3>
-        <ol>
-          {meetings.map((meeting, index) => (
-            <li key={index}>{meeting.meetingName}</li>
-          ))}
-        </ol>
-      </div>
-      <div>
-        <h3>Todays Locations</h3>
-        <ol>
-          {meetings.map((meeting, index) => (
-            <li key={index}>{meeting.location}</li>
-          ))}
-        </ol>
+      <div className="container">
+        <div>
+          <h2>Meeting</h2>
+          <ol>
+            {meetings.map((meeting, index) => (
+              <li key={index + meeting.meetingName}>{meeting.meetingName}</li>
+            ))}
+          </ol>
+        </div>
+        <div>
+          <h2>Location</h2>
+          <ol>
+            {meetings.map((meeting, index) => (
+              <li key={index + meeting.location}>{meeting.location}</li>
+            ))}
+          </ol>
+        </div>
+        <div>
+          <h2>Type</h2>
+          <ol>
+            {meetings.map((meeting, index) => (
+              <li key={index + meeting.raceType}>{meeting.raceType}</li>
+            ))}
+          </ol>
+        </div>
       </div>
     </>
   );

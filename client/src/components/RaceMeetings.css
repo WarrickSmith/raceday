@@ -1,0 +1,24 @@
+/* CSS Styling for the RaceMeetings component */
+
+.container {
+  display: grid;
+  grid-template-columns: 1.75fr 1fr 1fr;
+  text-align: left;
+  margin: 1rem;
+  padding: 0.5rem;
+  background-color: var(--background);
+}
+
+ol {
+  list-style-type: none;
+  /* padding: 0 1rem; */
+}
+
+li {
+  padding: 0.1rem 0;
+}
+
+.spinner {
+  width: 60%;
+  height: 60%;
+}

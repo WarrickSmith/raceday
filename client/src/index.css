@@ -1,13 +1,35 @@
+/* Set default variables */
+:root {
+  --background: rgb(68, 65, 65);
+  --primary: rgb(32, 32, 36);
+  --textColour: rgb(236, 230, 230);
+  --textColour2: rgb(242, 245, 98);
+  --shadow: 0 1px 5px rgba(104, 104, 104, 0.8);
+  --radius: 1vh;
+  --rowMargin: 0.5vh;
+}
+
+/* Remove default padding and margin on all elements */
+* {
+  padding: 0;
+  margin: 0;
+}
+
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
+    "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /* Apply default colours and text alignmentto app.js */
+  background-color: var(--primary);
+  color: var(--textColour);
+  text-align: center;
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New",
     monospace;
 }

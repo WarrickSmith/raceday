@@ -1,7 +1,6 @@
 // Main RaceDay application page with routes to application sub pages
 
 import { Routes, Route } from "react-router-dom";
-import "./App.css";
 
 // Import modules used for navigation header and page routing
 import Navbar from "./components/Navbar";
@@ -15,7 +14,7 @@ function App() {
   return (
     <>
       <Navbar />
-      <div className="App">
+      <div>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="raceday" element={<Raceday />} />
