@@ -18,7 +18,7 @@ describe("<App />", () => {
     expect(result).toBeTruthy();
 
     // Check default home page content has rendered
-    result = screen.getByText(/RaceDay Analysis/i);
+    result = screen.getByText(/RaceDay Info/i);
     expect(result).toBeTruthy();
   });
 });

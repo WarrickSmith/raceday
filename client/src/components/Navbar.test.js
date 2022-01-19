@@ -24,7 +24,7 @@ describe("Component - Navbar />", () => {
     expect(result).toBeTruthy();
 
     // Check Home Page has rendered
-    result = screen.getByText(/RaceDay Analysis/i);
+    result = screen.getByText(/RaceDay Info/i);
     expect(result).toBeTruthy();
   });
 
@@ -51,7 +51,7 @@ describe("Component - Navbar />", () => {
     expect(result).toBeTruthy();
     // Home Page - click back to /Home
     await fireEvent.click(screen.getByText("Home"));
-    result = screen.getByText(/RaceDay Analysis/i);
+    result = screen.getByText(/RaceDay Info/i);
     expect(result).toBeTruthy();
   });
 });
