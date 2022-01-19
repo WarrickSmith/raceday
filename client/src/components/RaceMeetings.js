@@ -22,7 +22,7 @@ const RaceMeetings = () => {
     loadMeetings();
   }, []);
 
-  //Render and return elements to application - Show loading gif if promise still pending (meetings = undefined)
+  //Render and return meetings element to application - Show loading gif if promise still pending (meetings = undefined)
 
   if (meetings === undefined) {
     return (
@@ -33,9 +33,11 @@ const RaceMeetings = () => {
     );
   } else
     console.log(`"meetings" Length for element mapping is: `, meetings.length);
+
+  // Map meetings array and build elements for relevant array items
   return (
     <>
-      <div className="container">
+      <div className="meetings-container">
         <div>
           <h2>Meeting</h2>
           <ol>
