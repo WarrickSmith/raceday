@@ -3,21 +3,25 @@
 
 import "./Spinner.css";
 
-const Spinner = () => (
-  <div className="lds-spinner">
-    <div></div>
-    <div></div>
-    <div></div>
-    <div></div>
-    <div></div>
-    <div></div>
-    <div></div>
-    <div></div>
-    <div></div>
-    <div></div>
-    <div></div>
-    <div></div>
-  </div>
-);
+const Spinner = () => {
+  return (
+    <>
+      <div data-testid="spinner" className="lds-spinner">
+        <div></div>
+        <div></div>
+        <div></div>
+        <div></div>
+        <div></div>
+        <div></div>
+        <div></div>
+        <div></div>
+        <div></div>
+        <div></div>
+        <div></div>
+        <div></div>
+      </div>
+    </>
+  );
+};
 
 export default Spinner;
