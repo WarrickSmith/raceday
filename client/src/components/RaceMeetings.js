@@ -27,6 +27,7 @@ const RaceMeetings = () => {
   if (meetings === undefined) {
     return (
       <div className="centertext">
+        <h2>Fetching Meeting Info...</h2>
         <Spinner />
       </div>
     );
