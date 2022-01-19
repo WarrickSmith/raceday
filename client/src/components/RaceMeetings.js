@@ -4,6 +4,8 @@
 import { useState, useEffect } from "react";
 import getRaceMeetings from "../services/getRaceMeetings";
 import "./RaceMeetings.css";
+import "./Spinner";
+import Spinner from "./Spinner";
 
 // Get race meetings data
 const RaceMeetings = () => {
@@ -24,15 +26,9 @@ const RaceMeetings = () => {
 
   if (meetings === undefined) {
     return (
-      <div>
+      <div className="centertext">
         <h2>Fetching Race Meetings for Today...</h2>
-        <img
-          className="spinner"
-          src={"loading.gif"}
-          alt={"loading placeholder"}
-          width={270}
-          height={270}
-        />
+        <Spinner />
       </div>
     );
   } else

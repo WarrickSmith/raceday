@@ -9,16 +9,18 @@
   background-color: var(--background);
 }
 
+/* Center the spinner element and heading */
+.centertext {
+  display: grid;
+  justify-items: center;
+  margin: 2rem 0;
+}
+
+/* Remove list bullet points */
 ol {
   list-style-type: none;
-  /* padding: 0 1rem; */
 }
 
 li {
   padding: 0.1rem 0;
-}
-
-.spinner {
-  width: 60%;
-  height: 60%;
 }
