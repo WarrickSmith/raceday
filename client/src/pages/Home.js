@@ -1,12 +1,13 @@
 // This is the main application home page
 
 import RaceMeetings from "../components/RaceMeetings";
+import "./Home.css";
 
 function Home() {
   return (
     <>
-      <main>
-        <h2>RaceDay Analysis</h2>
+      <main className="home-container">
+        <h2>RaceDay Info</h2>
         <RaceMeetings />
       </main>
     </>
