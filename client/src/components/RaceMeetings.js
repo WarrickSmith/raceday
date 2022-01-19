@@ -36,34 +36,32 @@ const RaceMeetings = () => {
 
   // Map meetings array and build elements for relevant array items
   return (
-    <>
-      <div className="meetings-container">
-        <div>
-          <h2>Meeting</h2>
-          <ol>
-            {meetings.map((meeting, index) => (
-              <li key={index + meeting.meetingName}>{meeting.meetingName}</li>
-            ))}
-          </ol>
-        </div>
-        <div>
-          <h2>Location</h2>
-          <ol>
-            {meetings.map((meeting, index) => (
-              <li key={index + meeting.location}>{meeting.location}</li>
-            ))}
-          </ol>
-        </div>
-        <div>
-          <h2>Type</h2>
-          <ol>
-            {meetings.map((meeting, index) => (
-              <li key={index + meeting.raceType}>{meeting.raceType}</li>
-            ))}
-          </ol>
-        </div>
+    <div className="meetings-container">
+      <div>
+        <h2>Meeting</h2>
+        <ol>
+          {meetings.map((meeting, index) => (
+            <li key={index + meeting.meetingName}>{meeting.meetingName}</li>
+          ))}
+        </ol>
       </div>
-    </>
+      <div>
+        <h2>Location</h2>
+        <ol>
+          {meetings.map((meeting, index) => (
+            <li key={index + meeting.location}>{meeting.location}</li>
+          ))}
+        </ol>
+      </div>
+      <div>
+        <h2>Type</h2>
+        <ol>
+          {meetings.map((meeting, index) => (
+            <li key={index + meeting.raceType}>{meeting.raceType}</li>
+          ))}
+        </ol>
+      </div>
+    </div>
   );
 };
 
