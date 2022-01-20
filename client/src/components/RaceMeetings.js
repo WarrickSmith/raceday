@@ -17,7 +17,7 @@ const RaceMeetings = () => {
     const loadMeetings = async () => {
       const result = await getRaceMeetings();
       setMeetings(result.meetings);
-      return result;
+      return;
     };
     loadMeetings();
   }, []);
