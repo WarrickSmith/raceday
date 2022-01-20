@@ -46,6 +46,8 @@
   align-items: flex-start;
   opacity: 0.9;
   transition: all 5s ease;
+  border: 3px solid purple;
+  border-radius: 0 0 0.5rem 0.5rem;
 }
 
 .nav-item {
