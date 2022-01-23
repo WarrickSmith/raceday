@@ -1,7 +1,7 @@
-// Unit test for getRaces
+// Unit test for getAllMeetingRaces
 
 const getRaceMeetings = require("./getRaceMeetings");
-const getAllRaces = require("./getAllRaces");
+const getAllMeetingRaces = require("./getAllMeetingRaces");
 
 describe("getRaces function unit test:", () => {
   // Test for all Race Meetings happy path
@@ -11,7 +11,7 @@ describe("getRaces function unit test:", () => {
     const racesUrl = result.meetings[0]._links.races;
 
     // test getRaces function with valid racesUrl as argument
-    const received = await getAllRaces(racesUrl);
+    const received = await getAllMeetingRaces(racesUrl);
     expect(received).toBeObject;
     expect(received).toHaveProperty("races[0].raceNumber");
   });

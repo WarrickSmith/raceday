@@ -5,7 +5,7 @@ const app = express();
 
 // Project Module, Schema & Utils imports
 const getRaceMeetings = require("./modules/getRaceMeetings.js");
-const getAllRaces = require("./modules/getAllRaces");
+const getAllMeetingRaces = require("./modules/getAllMeetingRaces");
 const getRace = require("./modules/getRace");
 
 app.use(cors()); // Prevent CORS error on client web browser
@@ -35,10 +35,10 @@ app.get("/racemeetings", async (request, response) => {
 });
 
 // All Races endpoint - Return an object containing all of today's races for a single meeting
-app.get("/allraces/:url", async (request, response) => {
+app.get("/allmeetingraces/:url", async (request, response) => {
   const url = request.params.url;
   console.log("received all races URL parameter: ", url);
-  const result = await getAllRaces(url);
+  const result = await getAllMeetingRaces(url);
   if (result.races) return response.status(200).send(result);
   else if (result.error) {
     return response.status(503).send(result);

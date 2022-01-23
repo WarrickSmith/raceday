@@ -1,7 +1,7 @@
 // Unit test for getRace
 
 const getRaceMeetings = require("./getRaceMeetings");
-const getAllRaces = require("./getAllRaces");
+const getAllMeetingRaces = require("./getAllMeetingRaces");
 const getRace = require("./getRace");
 
 describe("getRace function unit test:", () => {
@@ -13,7 +13,7 @@ describe("getRace function unit test:", () => {
     console.log(`Races URL is: ${racesUrl}`);
 
     // get a valid race URL to provide to the getRace unit test
-    result = await getAllRaces(racesUrl);
+    result = await getAllMeetingRaces(racesUrl);
     const raceUrl = result.races[0]._links.self;
     console.log(`race URL is: ${raceUrl}`);
 

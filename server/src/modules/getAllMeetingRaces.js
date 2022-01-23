@@ -6,27 +6,27 @@
 
 const fetch = require("node-fetch"); // Used to support asynch-await-fetch
 
-const getAllRaces = async (meetingUrl) => {
+const getAllMeetingRaces = async (meetingUrl) => {
   try {
-    // Fetch object containing races for 'today'
+    // Fetch object containing races for 'today' for a specific meting
     console.log("\x1b[36m%s\x1b[0m", "module - fetching todays Race data...");
     const result = await fetch(meetingUrl);
     const races = await result.json();
-    console.log("\x1b[36m%s\x1b[0m", "All Races Fetched");
+    console.log("\x1b[36m%s\x1b[0m", "All Races for Meeting Fetched");
     return races;
   } catch (error) {
     console.log(
       "\x1b[31m%s\x1b[0m",
-      "An API Server error has occurred fetching Races Data in module 'getALLRaces'"
+      "An API Server error has occurred fetching Races Data in module 'getALLMeetingRaces'"
     );
     return {
       error: {
         code: "SERVICE_UNAVAILABLE_ERROR",
         message:
-          "No response was received from TAB Corp API the Server for getAllRaces",
+          "No response was received from TAB Corp API the Server for getAllMeetingRaces",
       },
     };
   }
 };
 
-module.exports = getAllRaces;
+module.exports = getAllMeetingRaces;
