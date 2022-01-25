@@ -22,7 +22,7 @@ app.get("/", async (request, response) => {
 // Race Meetings endpoint - Return an object containing today's race meetings in detail
 app.get("/racemeetings", async (request, response) => {
   const result = await getRaceMeetings();
-  if (result.meetings) return response.status(200).send(result);
+  if (!result.meetings.error) return response.status(200).send(result);
   else if (result.error) {
     return response.status(503).send(result);
   } else {
@@ -56,7 +56,7 @@ app.get("/allmeetingraces/:url", async (request, response) => {
   const url = request.params.url;
   console.log("received all races URL parameter: ", url);
   const result = await getAllMeetingRaces(url);
-  if (result.races) return response.status(200).send(result);
+  if (!result.races.error) return response.status(200).send(result);
   else if (result.error) {
     return response.status(503).send(result);
   } else {
@@ -74,7 +74,7 @@ app.get("/race/:url", async (request, response) => {
   const url = request.params.url;
   console.log("received single race URL parameter: ", url);
   const result = await getRace(url);
-  if (result.raceNumber) return response.status(200).send(result);
+  if (!result.raceNumber.error) return response.status(200).send(result);
   else if (result.error) {
     return response.status(503).send(result);
   } else {
