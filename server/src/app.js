@@ -38,18 +38,17 @@ app.get("/racemeetings", async (request, response) => {
 // All Races endpoint - Return an object containing today's race meetings in detail
 app.get("/allraces", async (request, response) => {
   const result = await getAllRaces();
-  return response.status(200).send(result);
-  // if (result.meetings) return response.status(200).send(result);
-  // else if (result.error) {
-  //   return response.status(503).send(result);
-  // } else {
-  //   return response.status(404).send({
-  //     error: {
-  //       code: "RESOURCE_NOT_FOUND_ERROR",
-  //       message: "No response was received from the Server",
-  //     },
-  //   });
-  // }
+  if (!result.error) return response.status(200).send(result);
+  else if (result.error) {
+    return response.status(503).send(result);
+  } else {
+    return response.status(404).send({
+      error: {
+        code: "RESOURCE_NOT_FOUND_ERROR",
+        message: "No response was received from the Server",
+      },
+    });
+  }
 });
 
 // All Races endpoint - Return an object containing all of today's races for a single meeting
