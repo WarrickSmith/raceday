@@ -5,7 +5,7 @@ import LiveRacing from "../components/RaceDay/LiveRacing";
 function Raceday() {
   return (
     <>
-      <main>
+      <main className="home-container">
         <h2>RaceDay</h2>
         <LiveRacing />
       </main>
