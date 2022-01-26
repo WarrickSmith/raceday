@@ -22,7 +22,7 @@ const RaceMeetings = () => {
     loadMeetings();
   }, []);
 
-  //Render and return meetings element to application - Show loading gif if promise still pending (meetings = undefined)
+  //Render and return meetings element to application - Show loading animation if promise still pending (meetings = undefined)
 
   if (meetings === undefined) {
     return (
