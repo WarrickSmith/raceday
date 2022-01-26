@@ -4,7 +4,6 @@
 import { useState, useEffect } from "react";
 import getRaceMeetings from "../services/getRaceMeetings";
 import "./RaceMeetings.css";
-import "./Spinner";
 import Spinner from "./Spinner";
 
 // Get race meetings data
