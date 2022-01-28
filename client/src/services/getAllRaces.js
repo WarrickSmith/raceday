@@ -13,12 +13,13 @@ const getAllRaces = async () => {
       return allRaces;
     }
   } catch (error) {
-    alert(
+    console.log(
       `There has been a problem fetching All Racess (getAllRaces):
     Please re-load the web page.`,
       error
     );
-    return;
+
+    return error;
   }
 };
 
