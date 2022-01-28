@@ -24,7 +24,6 @@ const LiveRacing = () => {
 
   //Render and return LiveRacing element to application - Show loading animation if promise still pending (allRaces = undefined)
   if (allRaces === undefined) {
-    console.log(`allRaces is : ${allRaces}`);
     return (
       <div className="centertext">
         <h2>The LiveRacing Element has rendered</h2>
