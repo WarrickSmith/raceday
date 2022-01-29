@@ -1,6 +1,6 @@
 // This page is to show live race data for the current race day
-import "../components/RaceDay/LiveRacing";
-import LiveRacing from "../components/RaceDay/LiveRacing";
+import "../components/LiveRacing/LiveRacing";
+import LiveRacing from "../components/LiveRacing/LiveRacing";
 
 function Raceday() {
   return (
