@@ -36,22 +36,14 @@ const LiveRacing = () => {
 
   // Map allRaces array and build elements for relevant array items
   return (
-    <>
-      <RaceSelector />
+    <div className="centertext">
+      <RaceSelector allRaces={allRaces} />
       <div className="meetings-container">
         <div>
           <h2>Race</h2>
           <ol>
             {allRaces.map((race, index) => (
               <li key={index + race.RaceName}>{race.RaceName}</li>
-            ))}
-          </ol>
-        </div>
-        <div>
-          <h2>Time</h2>
-          <ol>
-            {allRaces.map((race, index) => (
-              <li key={index + race.RaceStartTime}>{race.RaceStartTime}</li>
             ))}
           </ol>
         </div>
@@ -64,7 +56,7 @@ const LiveRacing = () => {
           </ol>
         </div>
       </div>
-    </>
+    </div>
   );
 };
 

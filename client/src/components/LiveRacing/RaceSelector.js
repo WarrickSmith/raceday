@@ -4,12 +4,21 @@
 import Spinner from "../Spinner";
 
 // Render Element
-const RaceSelector = () => {
+const RaceSelector = ({ allRaces }) => {
   return (
-    <div className="centertext">
-      <h2>RaceSelector Element</h2>
-      <Spinner />
-    </div>
+    <>
+      <div className="centertext">
+        <Spinner />
+      </div>
+      <div>
+        <h2>Race</h2>
+        <ol>
+          {allRaces.map((race, index) => (
+            <li key={index + race.RaceName}>{race.RaceName}</li>
+          ))}
+        </ol>
+      </div>
+    </>
   );
 };
 export default RaceSelector;
