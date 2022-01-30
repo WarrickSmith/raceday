@@ -7,9 +7,7 @@ describe("Unit Test rendering of <RaceSelector /> element", () => {
   // Test rendering Spinner element while awaiting async result
   it("Renders RaceSelector Element correctly", async () => {
     render(<RaceSelector />);
-    const pageText = screen.getByText(/RaceSelector Element/i);
+    const pageText = screen.getByText(/NEXT SCHEDULED RACE/i);
     expect(pageText).toBeInTheDocument();
-    const spinner = screen.getByTestId("spinner");
-    expect(spinner).toBeInTheDocument();
   });
 });

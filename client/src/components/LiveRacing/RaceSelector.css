@@ -1,8 +1,31 @@
 /* CSS Styling for the RaceSelector Element */
 
-/* Center the spinner element and heading */
-/* .centertext {
+.raceselector {
   display: grid;
-  justify-items: center;
-  margin: 2rem 0;
-} */
+  grid-gap: 1vh;
+  margin: 1vh;
+}
+
+.race-select-textbox,
+.raceselector button {
+  color: var(--textColour);
+  background-color: var(--background);
+  padding: 1vh;
+}
+
+.race-select-textbox {
+  border-radius: var(--radius);
+}
+
+.selector-buttons {
+  display: grid;
+  grid-gap: 1%;
+  grid-template-columns: 1fr 5fr 1fr;
+}
+
+.button-minus {
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+.button-plus {
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
