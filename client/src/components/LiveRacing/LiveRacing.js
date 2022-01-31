@@ -6,13 +6,14 @@ import getAllRaces from "../../services/getAllRaces";
 import "./LiveRacing.css";
 import Spinner from "../Spinner";
 import RaceSelector from "./RaceSelector";
-import Raceday from "../../pages/Raceday";
 
 // Get 'all races' data
 const LiveRacing = () => {
   console.log("LiveRacing Element Rendered");
   // Create stateful variable to store allRaces data
   const [allRaces, setAllRaces] = useState();
+  // Create stateful variable to track currently selected Race
+  const [currentRace, setCurrentRace] = useState(0);
 
   // Run useEffect once to initially fetch allRaces data
   useEffect(() => {
@@ -37,7 +38,11 @@ const LiveRacing = () => {
   // Map allRaces array and build elements for relevant array items
   return (
     <div className="centertext">
-      <RaceSelector allRaces={allRaces} />
+      <RaceSelector
+        allRaces={allRaces}
+        currentRace={currentRace}
+        setCurrentRace={setCurrentRace}
+      />
       <div className="meetings-container">
         <div>
           <h2>Race</h2>
