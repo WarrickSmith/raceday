@@ -21,7 +21,7 @@ describe("Unit Test rendering of <RaceDay /> element", () => {
       });
     });
     // Check element has rendered
-    const pageText2 = await screen.findByText(/Type/i);
+    const pageText2 = await screen.findByText(/RaceData Element Loading.../i);
     expect(pageText2).toBeInTheDocument();
   });
 });

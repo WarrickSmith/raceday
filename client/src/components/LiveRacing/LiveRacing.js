@@ -6,6 +6,7 @@ import getAllRaces from "../../services/getAllRaces";
 import "./LiveRacing.css";
 import Spinner from "../Spinner";
 import RaceSelector from "./RaceSelector";
+import RaceData from "./RaceData";
 
 // Get 'all races' data
 const LiveRacing = () => {
@@ -43,24 +44,7 @@ const LiveRacing = () => {
         currentRace={currentRace}
         setCurrentRace={setCurrentRace}
       />
-      <div className="meetings-container">
-        <div>
-          <h2>Race</h2>
-          <ol>
-            {allRaces.map((race, index) => (
-              <li key={index + race.RaceName}>{race.RaceName}</li>
-            ))}
-          </ol>
-        </div>
-        <div>
-          <h2>Type</h2>
-          <ol>
-            {allRaces.map((race, index) => (
-              <li key={index + race.RaceType}>{race.RaceType}</li>
-            ))}
-          </ol>
-        </div>
-      </div>
+      <RaceData raceUrl={allRaces[currentRace].RaceLink} />
     </div>
   );
 };
