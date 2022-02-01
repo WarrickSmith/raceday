@@ -3,7 +3,7 @@
 // Import dependancies
 import "./RaceSelector.css";
 
-// Render Element
+// Render RaceSelector Element
 const RaceSelector = ({ allRaces, currentRace, setCurrentRace }) => {
   console.log(`RaceSelector Element Loading...`);
 
@@ -16,9 +16,16 @@ const RaceSelector = ({ allRaces, currentRace, setCurrentRace }) => {
   };
 
   // Event handler for clicking on 'NEXT SCHEDULED RACE'
-  const handleOnClick = () => {
+  const handleOnClick = (event) => {
     console.log(`A click event has been detected!`);
     // setCurrentRace(getNextRace(raceList));
+    console.log(`current race is: ${currentRace}`);
+    const dateNow = new Date();
+    const raceIndex = allRaces.findIndex(
+      (race) => new Date(race.RaceStartTime) >= dateNow
+    );
+    console.log(`RaceIndex is ${raceIndex}`);
+    setCurrentRace(raceIndex);
   };
 
   // Event handler for clicking on '<<' decrease race by one
@@ -41,7 +48,7 @@ const RaceSelector = ({ allRaces, currentRace, setCurrentRace }) => {
 
   return (
     <>
-      <div className="raceselector">
+      <div className="raceselector-container meetings-container">
         {allRaces && (
           <select
             className="race-select-textbox"

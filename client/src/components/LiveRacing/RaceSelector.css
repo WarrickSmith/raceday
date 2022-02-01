@@ -1,16 +1,22 @@
 /* CSS Styling for the RaceSelector Element */
 
-.raceselector {
-  display: grid;
-  grid-gap: 1vh;
-  margin: 1vh;
+.raceselector-container {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  margin: 1rem;
+  padding: 0.5rem;
+  background-color: var(--background);
+  grid-gap: 0.5rem;
+  margin: 1rem;
+  align-items: center;
 }
 
 .race-select-textbox,
-.raceselector button {
+.raceselector-container button {
   color: var(--textColour);
   background-color: var(--background);
-  padding: 1vh;
+  /* padding: 0.5rem; */
 }
 
 .race-select-textbox {
@@ -19,8 +25,9 @@
 
 .selector-buttons {
   display: grid;
-  grid-gap: 1%;
   grid-template-columns: 1fr 5fr 1fr;
+  grid-gap: 0.5rem;
+  width: 80%;
 }
 
 .button-minus {
