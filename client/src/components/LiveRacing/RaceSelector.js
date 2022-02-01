@@ -1,6 +1,7 @@
 // This component will return an Element to select a race from todays races
 
 // Import dependancies
+import { useEffect } from "react";
 import "./RaceSelector.css";
 
 // Render RaceSelector Element
@@ -18,7 +19,6 @@ const RaceSelector = ({ allRaces, currentRace, setCurrentRace }) => {
   // Event handler for clicking on 'NEXT SCHEDULED RACE'
   const handleOnClick = (event) => {
     console.log(`A click event has been detected!`);
-    // setCurrentRace(getNextRace(raceList));
     console.log(`current race is: ${currentRace}`);
     const dateNow = new Date();
     const raceIndex = allRaces.findIndex(
@@ -42,6 +42,11 @@ const RaceSelector = ({ allRaces, currentRace, setCurrentRace }) => {
       setCurrentRace((previousRace) => previousRace + 1);
     }
   };
+
+  // Run useEffect once to set current race to next scheduled race
+  useEffect(() => {
+    handleOnClick();
+  }, []);
 
   // Confirm current Race is being updates as appropriate
   console.log(`Current Active Race: `, currentRace);
