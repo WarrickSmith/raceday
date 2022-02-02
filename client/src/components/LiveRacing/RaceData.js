@@ -18,7 +18,16 @@ const RaceData = ({ raceUrl }) => {
       setRaceData(result);
       return;
     };
-    loadRace();
+    try {
+      loadRace();
+    } catch (error) {
+      return (
+        <>
+          <h3>An error Has Occurred fetching Data for a single race</h3>
+          <p>error</p>
+        </>
+      );
+    }
   }, [raceUrl]);
 
   // render a spinner until raceData is returned
