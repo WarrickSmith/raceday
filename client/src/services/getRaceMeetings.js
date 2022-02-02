@@ -13,12 +13,12 @@ const getRaceMeetings = async () => {
       return raceMeetingsToday;
     }
   } catch (error) {
-    alert(
+    console.log(
       `There has been a problem fetching Race Meetings (getRaceMeetings):
   Please re-load the web page.`,
       error
     );
-    return;
+    return error;
   }
 };
 
