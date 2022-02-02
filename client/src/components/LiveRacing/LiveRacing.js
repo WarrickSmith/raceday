@@ -5,12 +5,16 @@ import { useState, useEffect } from "react";
 import getAllRaces from "../../services/getAllRaces";
 import "./LiveRacing.css";
 import Spinner from "../Spinner";
+import RaceSelector from "./RaceSelector";
+import RaceData from "./RaceData";
 
 // Get 'all races' data
 const LiveRacing = () => {
   console.log("LiveRacing Element Rendered");
   // Create stateful variable to store allRaces data
   const [allRaces, setAllRaces] = useState();
+  // Create stateful variable to track currently selected Race
+  const [currentRace, setCurrentRace] = useState(0);
 
   // Run useEffect once to initially fetch allRaces data
   useEffect(() => {
@@ -34,31 +38,13 @@ const LiveRacing = () => {
 
   // Map allRaces array and build elements for relevant array items
   return (
-    <div className="meetings-container">
-      <div>
-        <h2>Race</h2>
-        <ol>
-          {allRaces.map((race, index) => (
-            <li key={index + race.RaceName}>{race.RaceName}</li>
-          ))}
-        </ol>
-      </div>
-      <div>
-        <h2>Time</h2>
-        <ol>
-          {allRaces.map((race, index) => (
-            <li key={index + race.RaceStartTime}>{race.RaceStartTime}</li>
-          ))}
-        </ol>
-      </div>
-      <div>
-        <h2>Type</h2>
-        <ol>
-          {allRaces.map((race, index) => (
-            <li key={index + race.RaceType}>{race.RaceType}</li>
-          ))}
-        </ol>
-      </div>
+    <div className="centertext">
+      <RaceSelector
+        allRaces={allRaces}
+        currentRace={currentRace}
+        setCurrentRace={setCurrentRace}
+      />
+      <RaceData raceUrl={allRaces[currentRace].RaceLink} />
     </div>
   );
 };

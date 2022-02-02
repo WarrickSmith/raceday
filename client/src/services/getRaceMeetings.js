@@ -9,10 +9,7 @@ const getRaceMeetings = async () => {
       throw Error(`${response.status} ${response.statusText}`);
     } else {
       const raceMeetingsToday = await response.json();
-      console.log(
-        `RaceDay Meetings Fetched from Service - getRaceMeetings: `,
-        raceMeetingsToday
-      );
+      console.log(`RaceDay Meetings Fetched from Service - getRaceMeetings: `);
       return raceMeetingsToday;
     }
   } catch (error) {

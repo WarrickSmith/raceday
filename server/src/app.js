@@ -81,7 +81,7 @@ app.get("/race/:url", async (request, response) => {
     return response.status(404).send({
       error: {
         code: "RESOURCE_NOT_FOUND_ERROR",
-        message: "No response was received from the Server",
+        message: "No response was received from the TAB Server",
       },
     });
   }

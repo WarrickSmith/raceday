@@ -1,0 +1,38 @@
+/* CSS Styling for the RaceSelector Element */
+
+.raceselector-container {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  margin: 1rem;
+  padding: 0.5rem;
+  background-color: var(--background);
+  grid-gap: 0.5rem;
+  margin: 1rem;
+  align-items: center;
+}
+
+.race-select-textbox,
+.raceselector-container button {
+  color: var(--textColour);
+  background-color: var(--background);
+  /* padding: 0.5rem; */
+}
+
+.race-select-textbox {
+  border-radius: var(--radius);
+}
+
+.selector-buttons {
+  display: grid;
+  grid-template-columns: 1fr 5fr 1fr;
+  grid-gap: 0.5rem;
+  width: 80%;
+}
+
+.button-minus {
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+.button-plus {
+  border-radius: 0 var(--radius) var(--radius) 0;
+}

@@ -9,7 +9,7 @@ const getAllRaces = async () => {
       throw Error(`${response.status} ${response.statusText}`);
     } else {
       const allRaces = await response.json();
-      console.log(`All Races Fetched from Service - getAllRaces: `, allRaces);
+      console.log(`All Races Fetched from Service - getAllRaces: `);
       return allRaces;
     }
   } catch (error) {

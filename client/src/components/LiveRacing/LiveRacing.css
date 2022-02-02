@@ -1,8 +1,8 @@
-/* CSS Styling for the LiveRaceing component */
+/* CSS Styling for the LiveRaceing element */
 
-.meetings-container {
-  display: grid;
-  grid-template-columns: 3fr 2fr 1fr;
+.racedata-container {
+  display: flex;
+  flex-direction: column;
   text-align: left;
   margin: 1rem;
   padding: 0.5rem;
@@ -30,7 +30,6 @@ li {
 @media only screen and (min-width: 51.25rem) {
   .meetings-container {
     display: grid;
-    justify-content: end;
     width: 50%;
   }
 }
