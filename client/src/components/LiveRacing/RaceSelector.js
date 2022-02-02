@@ -43,11 +43,6 @@ const RaceSelector = ({ allRaces, currentRace, setCurrentRace }) => {
     }
   };
 
-  // Run useEffect once to set current race to next scheduled race
-  useEffect(() => {
-    handleOnClick();
-  }, []);
-
   // Confirm current Race is being updates as appropriate
   console.log(`Current Active Race: `, currentRace);
 
