@@ -17,11 +17,10 @@ describe("Unit Test rendering of <RaceDay /> element", () => {
     await act(async () => {
       await new Promise((r) => {
         setTimeout(r, 10000);
-        console.log(`Async Time Delay Finished in RaceMeetings element test`);
       });
     });
     // Check element has rendered
-    const pageText2 = await screen.findByText(/RaceData Element Loading.../i);
+    const pageText2 = await screen.findByText(/NEXT SCHEDULED RACE/i);
     expect(pageText2).toBeInTheDocument();
   });
 });
