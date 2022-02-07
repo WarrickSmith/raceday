@@ -1,0 +1,6 @@
+/* css for raceday parent container element */
+
+.raceday-container {
+  display: grid;
+  justify-items: center;
+}
