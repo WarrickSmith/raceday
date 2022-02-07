@@ -1,7 +1,6 @@
 // This component will return an Element to select a race from todays races
 
 // Import dependancies
-import { useEffect } from "react";
 import "./RaceSelector.css";
 
 // Render RaceSelector Element
