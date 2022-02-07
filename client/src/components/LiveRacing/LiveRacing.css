@@ -1,7 +1,11 @@
 /* CSS Styling for the LiveRaceing element */
 
 .liveracing-container {
-  /* display: grid; */
+  display: grid;
+  justify-items: center;
+  grid-row-gap: 0.5rem;
+  padding: 0.5rem 0;
+  background-color: var(--background-color);
 }
 
 /* Center the spinner element and heading */
