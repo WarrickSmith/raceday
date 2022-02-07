@@ -1,6 +1,7 @@
 /* Set default variables */
 :root {
-  --background: rgb(68, 65, 65);
+  --background: rgb(105, 102, 102); /* container background colour */
+  --background-color: rgb(105, 102, 102); /* element background colour */
   --primary: rgb(32, 32, 36);
   --textColour: rgb(236, 230, 230);
   --textColour2: rgb(242, 245, 98);
@@ -24,7 +25,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 
   /* Apply default colours and text alignmentto app.js */
-  background-color: var(--primary);
+  background: var(--background);
   color: var(--textColour);
   text-align: center;
 }
