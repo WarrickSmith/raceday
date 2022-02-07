@@ -59,7 +59,7 @@ const LiveRacing = () => {
 
   // Map allRaces array and build elements for relevant array items
   return (
-    <div className="centertext">
+    <div className="liveracing-container">
       <RaceSelector
         allRaces={allRaces}
         currentRace={currentRace}

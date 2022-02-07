@@ -1,12 +1,13 @@
 /* CSS Styling for the LiveRaceing element */
 
-.racedata-container {
-  display: flex;
+.liveracing-container {
+  /* display: flex;
   flex-direction: column;
   text-align: left;
   margin: 1rem;
   padding: 0.5rem;
-  background-color: var(--background);
+  background-color: var(--background); */
+  display: grid;
 }
 
 /* Center the spinner element and heading */
