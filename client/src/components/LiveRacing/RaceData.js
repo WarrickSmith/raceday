@@ -4,6 +4,7 @@
 import { useState, useEffect } from "react";
 import Spinner from "../Spinner";
 import getRace from "../../services/getRace";
+import "./RaceData.css";
 
 // Return RaceData element
 const RaceData = ({ raceUrl }) => {
@@ -50,7 +51,7 @@ const RaceData = ({ raceUrl }) => {
         <p>Race Name: {raceData.raceName}</p>
         <p>Race Distance: {raceData.raceDistance}</p>
         <p>RUNNERS:</p>
-        <ol>
+        <ol className="messy">
           {raceData.runners.map((runner, index) => (
             <li key={index + runner.runnerName}>
               &nbsp;&nbsp;{" "}
