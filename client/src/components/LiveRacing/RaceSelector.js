@@ -48,7 +48,7 @@ const RaceSelector = ({ allRaces, currentRace, setCurrentRace }) => {
 
   return (
     <>
-      <div className="raceselector-container meetings-container">
+      <div className="raceselector-container">
         {allRaces && (
           <select
             className="race-select-textbox"
