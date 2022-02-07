@@ -2,6 +2,10 @@
 
 .racedata-container {
   display: grid;
+  justify-items: center;
+  grid-row-gap: 1rem;
+  padding: 0.5rem 0;
+  background-color: var(--background-color);
   justify-items: start;
   text-align: left;
 }

@@ -45,22 +45,26 @@ const RaceData = ({ raceUrl }) => {
   else
     return (
       <div className="racedata-container">
-        <h2>RaceData:</h2>
-        <h3>Race Type: {raceData.meeting.raceType}</h3>
-        <p>Current Race number: {raceData.raceNumber} </p>
-        <p>Race Name: {raceData.raceName}</p>
-        <p>Race Distance: {raceData.raceDistance}</p>
-        <p>RUNNERS:</p>
-        <ol className="messy">
-          {raceData.runners.map((runner, index) => (
-            <li key={index + runner.runnerName}>
-              &nbsp;&nbsp;{" "}
-              <img alt="" src={runner.silkURL} width="20" height="20"></img>
-              &nbsp;&nbsp;
-              {runner.runnerName}
-            </li>
-          ))}
-        </ol>
+        <div>
+          <h2>RaceData:</h2>
+          <h3>Race Type: {raceData.meeting.raceType}</h3>
+          <p>Current Race number: {raceData.raceNumber} </p>
+          <p>Race Name: {raceData.raceName}</p>
+          <p>Race Distance: {raceData.raceDistance}</p>
+        </div>
+        <div>
+          <p>RUNNERS:</p>
+          <ol className="messy">
+            {raceData.runners.map((runner, index) => (
+              <li key={index + runner.runnerName}>
+                &nbsp;&nbsp;{" "}
+                <img alt="" src={runner.silkURL} width="20" height="20"></img>
+                &nbsp;&nbsp;
+                {runner.runnerName}
+              </li>
+            ))}
+          </ol>
+        </div>
       </div>
     );
 };
