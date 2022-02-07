@@ -45,16 +45,16 @@ const RaceData = ({ raceUrl }) => {
   else
     return (
       <div className="racedata-container">
-        <div>
+        <div className="racedata-element">
           <h2>RaceData:</h2>
           <h3>Race Type: {raceData.meeting.raceType}</h3>
           <p>Current Race number: {raceData.raceNumber} </p>
           <p>Race Name: {raceData.raceName}</p>
           <p>Race Distance: {raceData.raceDistance}</p>
         </div>
-        <div>
+        <div className="racedata-element ">
           <p>RUNNERS:</p>
-          <ol className="messy">
+          <ol>
             {raceData.runners.map((runner, index) => (
               <li key={index + runner.runnerName}>
                 &nbsp;&nbsp;{" "}

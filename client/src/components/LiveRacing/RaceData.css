@@ -9,3 +9,8 @@
   justify-items: start;
   text-align: left;
 }
+
+.racedata-element {
+  background-color: var(--background);
+  padding: 1rem;
+}
