@@ -28,8 +28,8 @@ li {
 /* Media query - limit element width for non mobile displays */
 
 @media only screen and (min-width: 51.25rem) {
-  .meetings-container {
+  .racedata-container {
     display: grid;
-    width: 50%;
+    width: 75%;
   }
 }
