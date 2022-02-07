@@ -1,13 +1,7 @@
 /* CSS Styling for the LiveRaceing element */
 
 .liveracing-container {
-  /* display: flex;
-  flex-direction: column;
-  text-align: left;
-  margin: 1rem;
-  padding: 0.5rem;
-  background-color: var(--background); */
-  display: grid;
+  /* display: grid; */
 }
 
 /* Center the spinner element and heading */
@@ -29,8 +23,8 @@ li {
 /* Media query - limit element width for non mobile displays */
 
 @media only screen and (min-width: 51.25rem) {
-  .racedata-container {
-    display: grid;
-    width: 75%;
+  .liveracing-container {
+    /* display: grid;
+    width: 75%; */
   }
 }
