@@ -11,7 +11,7 @@ const getRace = require("./modules/getRace");
 
 app.use(cors()); // Prevent CORS error on client web browser
 app.use(express.json());
-
+console.log("Server Did Something");
 // Default Endpoint Route Get all Race Meetings
 app.get("/", async (request, response) => {
   return response
