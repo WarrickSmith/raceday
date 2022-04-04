@@ -4,7 +4,7 @@
 
 const getAllRaces = async () => {
   try {
-    const response = await fetch("http://localhost:5000/allraces");
+    const response = await fetch(`${process.env.REACT_APP_API_URL}/allraces`);
     if (!response.ok) {
       throw Error(`${response.status} ${response.statusText}`);
     } else {

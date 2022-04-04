@@ -5,10 +5,12 @@ services:
       context: ./client
     ports:
       - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:5001/api
     depends_on:
       - server
   server:
     build:
       context: ./server
     ports:
-      - "5000:5000"
+      - "5001:5000"

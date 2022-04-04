@@ -20,7 +20,7 @@ app.get("/", async (request, response) => {
 });
 
 // Race Meetings endpoint - Return an object containing today's race meetings in detail
-app.get("/racemeetings", async (request, response) => {
+app.get("/api/racemeetings", async (request, response) => {
   const result = await getRaceMeetings();
   if (!result.meetings.error) return response.status(200).send(result);
   else if (result.error) {

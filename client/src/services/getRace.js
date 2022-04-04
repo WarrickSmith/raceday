@@ -6,7 +6,7 @@ const getRace = async (raceUrl) => {
   console.log(`getRace service is connecting to API Server...`);
   try {
     const response = await fetch(
-      "http://localhost:5000/race/" + encodeURIComponent(raceUrl)
+      `${process.env.REACT_APP_API_URL}/race/` + encodeURIComponent(raceUrl)
     );
     if (!response.ok) {
       throw Error(`${response.status} ${response.statusText}`);
