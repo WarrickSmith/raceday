@@ -8,7 +8,6 @@ function Home() {
     <>
       <main className="home-container">
         <h2>RaceDay Info</h2>
-        <p>TEST!!</p>
         <RaceMeetings />
       </main>
     </>
