@@ -9,14 +9,17 @@ const getAllRaces = require("./modules/getAllRaces");
 const getAllMeetingRaces = require("./modules/getAllMeetingRaces");
 const getRace = require("./modules/getRace");
 
+// API Server Swagger Route
+const path = require("path");
+const yaml = require("js-yaml");
+const fs = require("fs");
+const swaggerUi = require("swagger-ui-express");
+const swaggerDocument = yaml.load(
+  fs.readFileSync(path.join(__dirname, "../apispec.yaml"), "utf8")
+);
+
 app.use(cors()); // Prevent CORS error on client web browser
 app.use(express.json());
-// Default Endpoint Route Get all Race Meetings
-app.get("/", async (request, response) => {
-  return response
-    .status(200)
-    .send("This is a default route with no information!!");
-});
 
 // Race Meetings endpoint - Return an object containing today's race meetings in detail
 app.get("/api/racemeetings", async (request, response) => {
@@ -85,5 +88,8 @@ app.get("/api/race/:url", async (request, response) => {
     });
   }
 });
+
+// Swagger API Server Route
+app.use("/", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 module.exports = app;
