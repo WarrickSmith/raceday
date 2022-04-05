@@ -1,0 +1,260 @@
+openapi: 3.0.2
+info:
+  version: "1.0"
+  contact:
+    name: Warrick Smith
+    email: warricksmith@developersinstitute.co.nz
+  title: Welcome to the RaceDay API!
+  description: This API allows user to Track Australian TAB Data
+servers:
+  - url: "http://localhost:5001/api"
+    description: Development server
+paths:
+  /products:
+    get:
+      summary: Returns a list of products
+      description: Get a list of products
+      operationId: get-products
+      tags:
+        - products
+      parameters:
+        - schema:
+            type: integer
+            minimum: 1
+            default: 10
+          in: query
+          name: limit
+          description: The number of products to return
+          required: false
+        - schema:
+            type: integer
+            default: 1
+            minimum: 1
+          in: query
+          name: page
+          description: Page to return - used to calculated SQL offset value when multiplied by ('page' - 1)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  products:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Product"
+                  currentPage:
+                    type: integer
+                  totalPages:
+                    type: integer
+                  itemsPerPage:
+                    type: integer
+                  totalItems:
+                    type: integer
+                required:
+                  - products
+                  - currentPage
+                  - totalPages
+                  - itemsPerPage
+                  - totalItems
+              examples:
+                example-1:
+                  value:
+                    products:
+                      - id: 0
+                        name: string
+                        description: string
+                        price: string
+                        categoryName: string
+                        imageName: string
+                        imageDescription: string
+                        discountValue: 0
+                        discountType: string
+                    currentPage: 0
+                    totalPages: 0
+                    itemsPerPage: 0
+                    totalItems: 0
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                example-1:
+                  value:
+                    message: string
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /reports:
+    get:
+      summary: Returns a list of reports
+      description: Get a list of reports
+      operationId: get-reports
+      security:
+        - bearerAuth: []
+      tags:
+        - reports
+      responses:
+        "200":
+          description: OK
+          headers: {}
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+              examples:
+                example-1:
+                  value:
+                    categoryReport:
+                      - categoryName: string
+                        totalProducts: 0
+                        discountedProducts: 0
+                    discountReport:
+                      - discountType: null
+                        totalProducts: 0
+                sample-report:
+                  value:
+                    categoryReport:
+                      - categoryName: Party outfits
+                        totalProducts: 28
+                        discountedProducts: 2
+                      - categoryName: Accessories
+                        totalProducts: 59
+                        discountedProducts: 7
+                      - categoryName: Tops
+                        totalProducts: 13
+                        discountedProducts: 0
+                    discountReport:
+                      - discountType: null
+                        totalProducts: 91
+                      - discountType: percentage off
+                        totalProducts: 4
+                      - discountType: fixed amount off
+                        totalProducts: 5
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                example-1:
+                  value:
+                    message: string
+                unauthorized:
+                  value:
+                    message: Unauthorized
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                example-1:
+                  value:
+                    message: string
+                forbidden:
+                  value:
+                    message: Forbidden
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                example-1:
+                  value:
+                    message: string
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: string
+        categoryName:
+          type: string
+          nullable: true
+        imageName:
+          type: string
+          nullable: true
+        imageDescription:
+          type: string
+          nullable: true
+        discountValue:
+          type: number
+          nullable: true
+        discountType:
+          type: string
+          nullable: true
+      required:
+        - id
+        - name
+        - description
+        - price
+        - categoryName
+        - imageName
+        - imageDescription
+        - discountValue
+        - discountType
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+    Report:
+      type: object
+      properties:
+        categoryReport:
+          type: array
+          uniqueItems: true
+          minItems: 1
+          items:
+            required:
+              - categoryName
+              - totalProducts
+              - discountedProducts
+            properties:
+              categoryName:
+                type: string
+                minLength: 1
+              totalProducts:
+                type: number
+              discountedProducts:
+                type: number
+        discountReport:
+          type: array
+          uniqueItems: true
+          minItems: 1
+          items:
+            required:
+              - totalProducts
+            properties:
+              discountType: {}
+              totalProducts:
+                type: number
+      required:
+        - categoryReport
+        - discountReport
+tags:
+  - name: products
+  - name: reports
