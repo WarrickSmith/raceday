@@ -147,7 +147,7 @@ components:
           message: string
     allRaces:
       type: array
-      description: ""
+      description: All Races Response Object
       minItems: 1
       uniqueItems: true
       items:
