@@ -7,6 +7,8 @@ info:
     name: Warrick smith
     email: warrick.smith@developersinstitute.co.nz
 servers:
+  - url: "https://ws-raceday.herokuapp.com/api"
+    description: Production Server
   - url: "http://localhost:5001/api"
     description: Development Server
 paths:
