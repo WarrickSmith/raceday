@@ -137,8 +137,14 @@ tags:
 components:
   schemas:
     error:
-      description: ""
+      description: Standard Error Response Object
       type: object
+      properties:
+        message:
+          type: string
+      x-examples:
+        example-1:
+          message: string
     allRaces:
       type: array
       description: ""
@@ -3999,7 +4005,7 @@ components:
             Location: GBR
             RaceType: R
     race:
-      description: ""
+      description: Single Race Response Object
       type: object
       x-examples:
         example-1:
@@ -5417,7 +5423,7 @@ components:
         - multiLegApproximates
         - betTypes
     raceMeetings:
-      description: ""
+      description: All Race Meeting Response Object
       type: object
       x-examples:
         example-1:
@@ -18368,7 +18374,7 @@ components:
       required:
         - meetings
     allMeetingRaces:
-      description: ""
+      description: All Races for a Meeting Response Object
       type: object
       x-examples:
         example-1:
