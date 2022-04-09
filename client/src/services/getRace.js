@@ -12,7 +12,12 @@ const getRace = async (raceUrl) => {
     );
     const response = await fetch(
       `${process.env.REACT_APP_API_URL}/race/?url=` +
-        encodeURIComponent(raceUrl)
+        encodeURIComponent(raceUrl),
+      {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
     );
     if (!response.ok) {
       throw Error(`${response.status} ${response.statusText}`);

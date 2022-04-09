@@ -4,7 +4,11 @@
 
 const getAllRaces = async () => {
   try {
-    const response = await fetch(`${process.env.REACT_APP_API_URL}/allraces`);
+    const response = await fetch(`${process.env.REACT_APP_API_URL}/allraces`, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
     if (!response.ok) {
       throw Error(`${response.status} ${response.statusText}`);
     } else {
