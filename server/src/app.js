@@ -54,8 +54,8 @@ app.get("/api/allraces", async (request, response) => {
 });
 
 // All Races endpoint - Return an object containing all of today's races for a single meeting
-app.get("/api/allmeetingraces/:url", async (request, response) => {
-  const url = request.params.url;
+app.get("/api/allmeetingraces/", async (request, response) => {
+  const { url } = request.query;
   console.log("received all races URL parameter: ", url);
   const result = await getAllMeetingRaces(url);
   if (!result.races.error) return response.status(200).send(result);
@@ -72,8 +72,9 @@ app.get("/api/allmeetingraces/:url", async (request, response) => {
 });
 
 // A Single Race endpoint - Return an object containing details for a single race
-app.get("/api/race/:url", async (request, response) => {
-  const url = request.params.url;
+app.get("/api/race/", async (request, response) => {
+  // const url = request.params.url;
+  const { url } = request.query;
   console.log("received single race URL parameter: ", url);
   const result = await getRace(url);
   if (!result.raceNumber.error) return response.status(200).send(result);
