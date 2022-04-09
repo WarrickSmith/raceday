@@ -10,7 +10,11 @@ const getAllMeetingRaces = async (meetingUrl) => {
   try {
     // Fetch object containing races for 'today' for a specific meting
     console.log("\x1b[36m%s\x1b[0m", "module - fetching todays Race data...");
-    const result = await fetch(meetingUrl);
+    const result = await fetch(meetingUrl, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
     const races = await result.json();
     console.log("\x1b[36m%s\x1b[0m", "All Races for Meeting Fetched");
     return races;

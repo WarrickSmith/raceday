@@ -13,7 +13,11 @@ const getRace = async (raceUrl) => {
       "\x1b[36m%s\x1b[0m",
       "module - fetching data for a single race..."
     );
-    const result = await fetch(raceUrl);
+    const result = await fetch(raceUrl, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
     const race = await result.json();
     console.log("\x1b[36m%s\x1b[0m", "Single Race Data Fetched");
     return race;

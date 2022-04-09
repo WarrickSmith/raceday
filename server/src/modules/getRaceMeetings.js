@@ -14,7 +14,12 @@ const getRaceMeetings = async () => {
     // Fetch object containing links to meetings for 'today', 'tomorrow' etc
     console.log("\x1b[36m%s\x1b[0m", "module - fetching race meeting data...");
     let result = await fetch(
-      "https://api.beta.tab.com.au/v1/tab-info-service/racing/dates?jurisdiction=NSW"
+      "https://api.beta.tab.com.au/v1/tab-info-service/racing/dates?jurisdiction=NSW",
+      {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
     );
     const RaceMeetings = await result.json();
     const raceDay = RaceMeetings.dates[0]._links.meetings; // [0]=today, [1]=tomorrow, etc.
@@ -25,7 +30,11 @@ const getRaceMeetings = async () => {
       "\x1b[36m%s\x1b[0m",
       "module - fetching Today's race meeting data..."
     );
-    result = await fetch(raceDay);
+    result = await fetch(raceDay, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
     const meetingsToday = await result.json();
     console.log("\x1b[36m%s\x1b[0m", "Today's Meetings Fetched");
     return meetingsToday;
