@@ -5,8 +5,14 @@
 const getRace = async (raceUrl) => {
   console.log(`getRace service is connecting to API Server...`);
   try {
+    console.log(
+      "Single Race Fetch URL: ",
+      `${process.env.REACT_APP_API_URL}/race/?url=` +
+        encodeURIComponent(raceUrl)
+    );
     const response = await fetch(
-      `${process.env.REACT_APP_API_URL}/race/` + encodeURIComponent(raceUrl)
+      `${process.env.REACT_APP_API_URL}/race/?url=` +
+        encodeURIComponent(raceUrl)
     );
     if (!response.ok) {
       throw Error(`${response.status} ${response.statusText}`);

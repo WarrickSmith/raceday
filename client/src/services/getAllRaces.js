@@ -14,7 +14,7 @@ const getAllRaces = async () => {
     }
   } catch (error) {
     console.log(
-      `There has been a problem fetching All Racess (getAllRaces):
+      `There has been a problem fetching All Races (getAllRaces):
     Please re-load the web page.`,
       error
     );
