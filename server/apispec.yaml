@@ -1,4 +1,4 @@
-openapi: 3.0.0
+openapi: 3.0.1
 info:
   title: RaceDay
   version: "1.0"
@@ -16,10 +16,11 @@ paths:
     parameters: []
     get:
       summary: Get User Info by User ID
-      operationId: get-users-userId
+      operationId: get-all-races
       description: Retrieve all races for 'today'
       tags:
         - allraces
+        - races
       responses:
         "200":
           description: OK
@@ -48,6 +49,7 @@ paths:
       description: Get a single race by passings its URL as a parameter
       tags:
         - race
+        - races
       responses:
         "200":
           description: OK
@@ -81,6 +83,7 @@ paths:
       summary: Your GET endpoint
       tags:
         - racemeetings
+        - meetings
       responses:
         "200":
           description: OK
@@ -107,6 +110,7 @@ paths:
       summary: Your GET endpoint
       tags:
         - allmeetingraces
+        - meetings
       responses:
         "200":
           description: OK
@@ -140,8 +144,10 @@ paths:
 tags:
   - name: allmeetingraces
   - name: allraces
+  - name: meetings
   - name: race
   - name: racemeetings
+  - name: races
 components:
   schemas:
     error:
