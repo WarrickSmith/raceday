@@ -18,8 +18,6 @@ paths:
       summary: GET All races for today
       operationId: get-all-races
       description: Retrieve all races for 'today'
-      tags:
-        - races
       responses:
         "200":
           description: OK
@@ -41,13 +39,13 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/error"
+      tags:
+        - Races
   /race:
     get:
-      summary: "GET a Single race for today"
+      summary: GET a Single race for today
       operationId: get-race
       description: Get a single race by passings its URL as a parameter
-      tags:
-        - races
       responses:
         "200":
           description: OK
@@ -75,12 +73,12 @@ paths:
           name: url
           description: Single Race URL
           required: true
+      tags:
+        - Races
     parameters: []
   /racemeetings:
     get:
-      summary: "GET all race meetings for today"
-      tags:
-        - meetings
+      summary: GET all race meetings for today
       responses:
         "200":
           description: OK
@@ -102,11 +100,11 @@ paths:
                 $ref: "#/components/schemas/error"
       operationId: get-racemeetings
       description: Get all race meetings for the day
+      tags:
+        - Meetings
   /allmeetingraces:
     get:
-      summary: "GET All races for a specific meeting"
-      tags:
-        - meetings
+      summary: GET All races for a specific meeting
       responses:
         "200":
           description: OK
@@ -136,10 +134,9 @@ paths:
           name: url
           description: A Single Race Meeting URL
           required: true
+      tags:
+        - Meetings
     parameters: []
-tags:
-  - name: meetings
-  - name: races
 components:
   schemas:
     error:
@@ -16364,3 +16361,6 @@ components:
               - raceStatus
       required:
         - races
+tags:
+  - name: Meetings
+  - name: Races
