@@ -41,7 +41,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/error"
-  "/race/{url}":
+  /race:
     get:
       summary: ""
       operationId: get-race
@@ -67,13 +67,15 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/error"
-    parameters:
-      - schema:
-          type: string
-        name: url
-        in: path
-        required: true
-        description: A Single Race URL
+      parameters:
+        - schema:
+            type: string
+            format: uri
+          in: query
+          name: url
+          description: Single Race URL
+          required: true
+    parameters: []
   /racemeetings:
     get:
       summary: Your GET endpoint
@@ -100,7 +102,7 @@ paths:
                 $ref: "#/components/schemas/error"
       operationId: get-racemeetings
       description: Get all race meetings for the day
-  "/allmeetingraces/{url}":
+  /allmeetingraces:
     get:
       summary: Your GET endpoint
       tags:
@@ -126,13 +128,15 @@ paths:
                 $ref: "#/components/schemas/error"
       operationId: get-allmeetingraces
       description: Get a single race meeting by passings its URL as a parameter
-    parameters:
-      - schema:
-          type: string
-        name: url
-        in: path
-        required: true
-        description: A Single Race Meeting URL
+      parameters:
+        - schema:
+            type: string
+            format: uri
+          in: query
+          name: url
+          description: A Single Race Meeting URL
+          required: true
+    parameters: []
 tags:
   - name: allmeetingraces
   - name: allraces
