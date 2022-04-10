@@ -19,7 +19,6 @@ paths:
       operationId: get-all-races
       description: Retrieve all races for 'today'
       tags:
-        - allraces
         - races
       responses:
         "200":
@@ -48,7 +47,6 @@ paths:
       operationId: get-race
       description: Get a single race by passings its URL as a parameter
       tags:
-        - race
         - races
       responses:
         "200":
@@ -82,7 +80,6 @@ paths:
     get:
       summary: Your GET endpoint
       tags:
-        - racemeetings
         - meetings
       responses:
         "200":
@@ -109,7 +106,6 @@ paths:
     get:
       summary: Your GET endpoint
       tags:
-        - allmeetingraces
         - meetings
       responses:
         "200":
@@ -142,11 +138,7 @@ paths:
           required: true
     parameters: []
 tags:
-  - name: allmeetingraces
-  - name: allraces
   - name: meetings
-  - name: race
-  - name: racemeetings
   - name: races
 components:
   schemas:
