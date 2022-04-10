@@ -15,7 +15,7 @@ paths:
   /allraces:
     parameters: []
     get:
-      summary: Get User Info by User ID
+      summary: GET All races for today
       operationId: get-all-races
       description: Retrieve all races for 'today'
       tags:
@@ -43,7 +43,7 @@ paths:
                 $ref: "#/components/schemas/error"
   /race:
     get:
-      summary: ""
+      summary: "GET a Single race for today"
       operationId: get-race
       description: Get a single race by passings its URL as a parameter
       tags:
@@ -78,7 +78,7 @@ paths:
     parameters: []
   /racemeetings:
     get:
-      summary: Your GET endpoint
+      summary: "GET all race meetings for today"
       tags:
         - meetings
       responses:
@@ -104,7 +104,7 @@ paths:
       description: Get all race meetings for the day
   /allmeetingraces:
     get:
-      summary: Your GET endpoint
+      summary: "GET All races for a specific meeting"
       tags:
         - meetings
       responses:
