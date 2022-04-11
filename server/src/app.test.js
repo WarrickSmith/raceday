@@ -7,10 +7,10 @@ const getRaceMeetings = require("./modules/getRaceMeetings");
 
 describe("app.js integration tests:", () => {
   // Test for GET all Race Meetings happy path
-  it("Should get all racemeetings - /racemeetings", async () => {
+  it.only("Should get all racemeetings - /racemeetings", async () => {
     const expectedStatus = 200;
     await request(app)
-      .get("/racemeetings")
+      .get("/api/racemeetings")
       .expect(expectedStatus)
       .expect((response) => {
         const body = response.body;
@@ -28,7 +28,7 @@ describe("app.js integration tests:", () => {
 
     // test getAllRaces endpoint passing racesUrl as a parameter
     await request(app)
-      .get(`/allmeetingraces/${racesUrl}`)
+      .get(`/api/allmeetingraces/${racesUrl}`)
       .expect(expectedStatus)
       .expect((response) => {
         const body = response.body;
@@ -52,7 +52,7 @@ describe("app.js integration tests:", () => {
 
     // test getAllRaces endpoint passing racesUrl as a parameter
     await request(app)
-      .get(`/race/${raceUrl}`)
+      .get(`/api/race/${raceUrl}`)
       .expect(expectedStatus)
       .expect((response) => {
         const body = response.body;
