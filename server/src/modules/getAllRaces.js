@@ -13,7 +13,7 @@ const getAllMeetingRaces = require("./getAllMeetingRaces");
 const getRace = require("./getRace");
 const fetch = require("node-fetch"); // Used to support asynch-await-fetch
 
-const getAllRaces = async () => {
+const getAllRaces = async (next) => {
   try {
     // - fetch all race meetings from getRaceMeetings module.
     const raceMeetings = await getRaceMeetings();
@@ -30,6 +30,7 @@ const getAllRaces = async () => {
       .filter((notUndefined) => notUndefined !== undefined);
 
     // - Parse allRaceLinks array and map result, returning an array of links to individual races  (allRaces)
+    console.log("Parsing Race links...");
     let allRaces = await Promise.all(
       allRaceLinks
         .map(async (race) => {
@@ -44,6 +45,7 @@ const getAllRaces = async () => {
     allRaces = allRaces.flat(); // Flatten theallRaces array from '[[w,x],[y,z]] to [w,x,y,z]
 
     // - Parse allRaces and return an array 'subset' individual race details (raceData) and a link to the race for furture race detail fetch/refresh
+    console.log("Parsing Races...");
     const raceData = await Promise.all(
       allRaces
         .map(async (race) => {
@@ -71,24 +73,14 @@ const getAllRaces = async () => {
     );
 
     // NOTE: Could return multiple objects within an object, ie, raceMeetisgs, allRaces
+    console.log("Returning Race Data...");
     return raceData
       .flat()
       .sort((a, b) =>
         new Date(a.RaceStartTime) > new Date(b.RaceStartTime) ? 1 : -1
       ); // Flatten the raceData array of objects from '[[{w,x},{y,z}]] to [{w,x},{y,z}] THEN sort ascending by RaceStartTime
-  } catch (error) {
-    // Error handling
-    console.log(
-      "\x1b[31m%s\x1b[0m",
-      "An API Server error has occurred fetching Races Data in module 'getALRaces'"
-    );
-    return {
-      error: {
-        code: "SERVICE_UNAVAILABLE_ERROR",
-        message:
-          "No response was received from TAB Corp API the Server for getAllRaces",
-      },
-    };
+  } catch (err) {
+    next(err);
   }
 };
 
