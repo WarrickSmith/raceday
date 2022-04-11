@@ -9,42 +9,25 @@
 
 const fetch = require("node-fetch"); // Used to support asynch-await-fetch
 
-const getRaceMeetings = async () => {
+const getRaceMeetings = async (next) => {
   try {
     // Fetch object containing links to meetings for 'today', 'tomorrow' etc
-    console.log("\x1b[36m%s\x1b[0m", "module - fetching race meeting data...");
     let result = await fetch(
       "https://api.beta.tab.com.au/v1/tab-info-service/racing/dates?jurisdiction=NSW"
     );
     const RaceMeetings = await result.json();
     const raceDay = RaceMeetings.dates[0]._links.meetings; // [0]=today, [1]=tomorrow, etc.
-    console.log("\x1b[36m%s\x1b[0m", "All Meetings Fetched");
 
     // Fetch 'Today's' race meeting data object using raceDay as the fetch link
-    console.log(
-      "\x1b[36m%s\x1b[0m",
-      "module - fetching Today's race meeting data..."
-    );
     result = await fetch(raceDay, {
       headers: {
         "Content-Type": "application/json",
       },
     });
     const meetingsToday = await result.json();
-    console.log("\x1b[36m%s\x1b[0m", "Today's Meetings Fetched");
     return meetingsToday;
-  } catch (error) {
-    console.log(
-      "\x1b[31m%s\x1b[0m",
-      "An API Server error has occurred fetching Race Meeting Data in module 'getRaceMeetings'"
-    );
-    return {
-      error: {
-        code: "SERVICE_UNAVAILABLE_ERROR",
-        message:
-          "No response was received from TAB Corp API the Server for getRaceMeetings",
-      },
-    };
+  } catch (err) {
+    next(err);
   }
 };
 

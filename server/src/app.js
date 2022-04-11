@@ -2,6 +2,7 @@
 const express = require("express");
 var cors = require("cors");
 const app = express();
+const errorHandlerMiddleware = require("./middleware/errorHandlerMiddleware");
 
 // Raceday router
 const racedayRouter = require("./racing/raceday.router");
@@ -24,5 +25,8 @@ app.use("/api", racedayRouter);
 
 // Swagger API Server Route
 app.use("/", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
+// Error Handling
+app.use(errorHandlerMiddleware);
 
 module.exports = app;
