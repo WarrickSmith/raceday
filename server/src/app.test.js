@@ -7,7 +7,7 @@ const getRaceMeetings = require("./modules/getRaceMeetings");
 
 describe("app.js integration tests:", () => {
   // Test for GET all Race Meetings happy path
-  it.only("Should get all racemeetings - /racemeetings", async () => {
+  it("Should get all racemeetings - /racemeetings", async () => {
     const expectedStatus = 200;
     await request(app)
       .get("/api/racemeetings")
