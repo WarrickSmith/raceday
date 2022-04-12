@@ -5,8 +5,6 @@ services:
       context: ./client
     ports:
       - "3001:3000"
-    environment:
-      - NODE_ENV=test
     depends_on:
       - server
     volumes:
@@ -17,8 +15,6 @@ services:
       context: ./server
     ports:
       - "5001:5000"
-    environment:
-      - NODE_ENV=test
     volumes:
       - ./server:/app
       - /app/node_modules
