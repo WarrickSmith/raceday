@@ -9,7 +9,7 @@ info:
 servers:
   - url: "https://nzdeal.nz/server/api"
     description: Production Server
-  - url: "http://localhost:5001/api"
+  - url: "http://localhost:5000/api"
     description: Development Server
 paths:
   /allraces:
