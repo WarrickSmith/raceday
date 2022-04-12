@@ -4,7 +4,7 @@ services:
     build:
       context: ./client
     environment:
-      - NODE_ENV=test
+      - REACT_APP_API_URL=http://localhost:5001/api
     ports:
       - "3001:3000"
     depends_on:
