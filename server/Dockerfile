@@ -1,7 +1,8 @@
 FROM node:16
 WORKDIR /app
-COPY . /app
-RUN ["npm","install"]
+COPY package*.json /app/
+RUN ["npm", "install"]
+COPY . /app/
 EXPOSE 5000
 ENTRYPOINT ["npm","start"]
 
