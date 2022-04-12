@@ -5,6 +5,9 @@ const getAllMeetingRaces = require("./getAllMeetingRaces");
 
 describe("getRaces function unit test:", () => {
   // Test for all Race Meetings happy path
+
+  jest.setTimeout(10000); // allow time for api server response
+
   it("Should get today's races for a specific meeting", async () => {
     // get valid races url for todays racing to provide to Unit test
     const result = await getRaceMeetings();

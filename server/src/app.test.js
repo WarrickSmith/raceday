@@ -28,7 +28,7 @@ describe("app.js integration tests:", () => {
 
     // test getAllRaces endpoint passing racesUrl as a parameter
     await request(app)
-      .get(`/api/allmeetingraces/${racesUrl}`)
+      .get(`/api/allmeetingraces/?url=${racesUrl}`)
       .expect(expectedStatus)
       .expect((response) => {
         const body = response.body;
@@ -52,7 +52,7 @@ describe("app.js integration tests:", () => {
 
     // test getAllRaces endpoint passing racesUrl as a parameter
     await request(app)
-      .get(`/api/race/${raceUrl}`)
+      .get(`/api/race/?url=${raceUrl}`)
       .expect(expectedStatus)
       .expect((response) => {
         const body = response.body;
