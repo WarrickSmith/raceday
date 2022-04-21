@@ -2,6 +2,7 @@
 
 // Import dependancies
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import getRaceMeetings from "../services/getRaceMeetings";
 import "./RaceMeetings.css";
 import Spinner from "./Spinner";
@@ -31,7 +32,7 @@ const RaceMeetings = () => {
       </div>
     );
   } else
-    console.log(`"meetings" Length for element mapping is: `, meetings.length);
+    console.log(`"meetings" Length for element mapping is: ${meetings.length}`);
 
   // Map meetings array and build elements for relevant array items
   return (
@@ -40,7 +41,21 @@ const RaceMeetings = () => {
         <h2>Meeting</h2>
         <ol>
           {meetings.map((meeting, index) => (
-            <li key={index + meeting.meetingName}>{meeting.meetingName}</li>
+            <li key={index + meeting.meetingName}>
+              {meeting._links !== undefined && (
+                <Link
+                  to={"races/" + encodeURIComponent(meeting._links.races)}
+                  className="link-text"
+                >
+                  {meeting.meetingName}
+                </Link>
+              )}
+              {meeting._links === undefined && (
+                <Link to={"/"} className="link-text">
+                  {meeting.meetingName}
+                </Link>
+              )}
+            </li>
           ))}
         </ol>
       </div>
