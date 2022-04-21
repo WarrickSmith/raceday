@@ -1,0 +1,6 @@
+/* css for races parent container element */
+
+.races-container {
+  display: grid;
+  justify-items: center;
+}
