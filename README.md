@@ -20,7 +20,6 @@
   <summary>Table of Contents</summary>
   <ol>
     <li>
-      <a href="#about-the-project">About The Project</a>
       <ul>
         <li><a href="#built-with">Built With</a></li>
       </ul>
@@ -61,77 +60,59 @@ Key frameworks and technologies used in this project are:
 - [Javascript / CSS / HTML](https://developer.mozilla.org) - Relevant to client and server components
 - [React](https://reactjs.org/) - Main Client Application Code Base
 - [Node](https://nodejs.org/) - Server Javascript application enviornment
-- [MongoDb](https://www.mongodb.com/) - NoSQL database
+- [Express](http://expressjs.com/) - Fast, unopinionated, minimalist web framework for Node.js
+- [MongoDb](https://www.mongodb.com/) - NoSQL database (to be implemented)
 - [Jest](https://jestjs.io/) - Testing enviornment
-- [Sup[erTest](https://www.npmjs.com/package/supertest) - High-level abstraction for testing HTTP
+- [SuperTest](https://www.npmjs.com/package/supertest) - High-level abstraction for testing HTTP
 - [Netlify](https://www.netlify.com/) - Web Site public hosting service
 
 <!-- GETTING STARTED -->
 
 ## Getting Started
 
-To get a local copy of the project up and running follow these simple steps.
+To get a local copy of the project up and running follow these steps.
 
 ### Prerequisites
 
-To see full project functionality you will need the following as a prerequsite:
+To see full project development functionality you will need the following as a prerequsite:
 
-1. An account on stripe.com. This is to create and maintina your product catalog.
-2. An account on begin.com. - This is to enable secure API integration with the strip.com product catalog and payments gateway.
+1. Docker (Docker desktop)
 
 ### Installation
 
-1. Get a API Keys from stripe.com
-2. Clone the repo
+1. The Client can be started locally with...
    ```sh
-   git clone https://github.com/your_username_/Project-Name.git
-   ```
-3. Install NPM packages
-   ```sh
+   CD client
    npm install
+   npm start
    ```
-4. Enter your stripe.com Public public in `.env.js`
+2. The server can be started with...
+   ```sh
+   CD server
+   npm install
+   napm satrt
+   ```
+3. Alternatively, both client and server can be started in Docker from the root directory...
    ```JS
-   REACT_APP_STRIPE_PUBLIC_KEY=
+   docker-compose up --build
    ```
-5. log in to begin.com and enter your Secret Key from your stripe.com account.
-6. Enter your begin.com deployed url `.env.js`
-
-   ```JS
-   REACT_APP_API_URL=
-   ```
-
-7. Log into stripe.com and add products that will be diplayed in the Top Hats shop catalog. Your must have a 'category' key.
+4. log in to begin.com and enter your Secret Key from your stripe.com account.
+5. In dDocker, the Client application will be on http://localhost:3000. The Server application will be on http://localhost:5000 (API Specification endpoint)
 
 <!-- USAGE EXAMPLES -->
 
 ## Usage
 
-The Top Hats site will initially show featured products and then the first 6 products in the catelog. There is a close button to hide the featured products and page pagination at the bottom of the catelog to allow viewing more products.
-
-Filter by category, Sort by and search product functionality is also included in a toolbar at the top of the screen to facilitate displaying products using a criteria.
-
-Clicking a 'Buy now' button on either a featured product or catalog item will redirect the user to a third party payment provider and return them to Top Hats once the payment is complete.
-
-A live version of the site has been deployed to: https://clever-knuth-5770a4.netlify.app/
-
-The products and prices json data can be viewed at begin.com:
-
-- Products: https://design-hc3-staging.begin.app/products
-
-- Prices: https://design-hc3-staging.begin.app/prices
-
-The Product Catalog can be viewed at:
-
-- https://dashboard.stripe.com/test/products?active=true
-
-(Note: you will need to be invited as a team member and will need to create an account if you do not have one)
+A live version of the site has been deployed to: https://ws-raceday.netlify.app/
 
 <!-- ROADMAP -->
 
 ## Roadmap
 
-Future functionaility will include ensuring the search functionality is not case sensative.
+- Future functionaility will include:
+- Adding a No-SQL DB (Mongo) to store data for analysis.
+- Adding Security to enable Authentication & Authorisation for data analysisaccess.
+- Improving useability and 'look & feel' for the Client application.
 
 <!-- CONTACT -->
 
@@ -158,19 +139,4 @@ Project Link: [https://github.com/WarrickSmith/raceday]
 
 ## RaceDay API Server
 
-RaceDay API Overview
-
-## API Endpoints
-
-<details>
-  <summary>Click to expand!</summary>
-  
-  ## Endpoints
-  1. Method: GetMeetings
-     * URL:     /getmeetings
-     * Verb:    GET
-    
-  2. Samples  
-     * REQUEST
-     * RESPONSE
-</details>
+The RaceDay Server has an API conforming with OpenApi 3.0.1. The public specification can be viewed at: https://warricksmith.com/server/
