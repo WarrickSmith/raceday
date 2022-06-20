@@ -40,8 +40,6 @@
 
 ## About The Project
 
-![Product Name Screen Shot][product-screenshot]
-
 RaceDay is a client-server application to view live Australian TAB racing info and Historical Data.
 
 Races are, (R)-Horse (Gallops), (H)-Harness (Trots) and (G)-Dogs (Greyhound).
@@ -69,7 +67,7 @@ To get a local copy of the project up and running follow these steps.
 
 ### Prerequisites
 
-To see full project development functionality you will need the following as a prerequsite:
+The client and Server apps can be stood up from the terminal, however, to run up the Docker containers you will need the following as a prerequsite:
 
 1. Docker (Docker desktop)
 
