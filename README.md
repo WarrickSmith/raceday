@@ -19,11 +19,7 @@
 <details open="open">
   <summary>Table of Contents</summary>
   <ol>
-    <li>
-      <ul>
-        <li><a href="#built-with">Built With</a></li>
-      </ul>
-    </li>
+    <li><a href="#built-with">Built With</a></li>
     <li>
       <a href="#getting-started">Getting Started</a>
       <ul>
@@ -33,11 +29,10 @@
     </li>
     <li><a href="#usage">Usage</a></li>
     <li><a href="#roadmap">Roadmap</a></li>
-    <li><a href="#contributing">Contributing</a></li>
-    <li><a href="#license">License</a></li>
     <li><a href="#contact">Contact</a></li>
     <li><a href="#acknowledgements">Acknowledgements</a></li>
     <li><a href="#raceday-api-server">RaceDay API Server</a></li>
+
   </ol>
 </details>
 
@@ -109,7 +104,8 @@ A live version of the site has been deployed to: https://ws-raceday.netlify.app/
 
 ## Roadmap
 
-- Future functionaility will include:
+Future functionaility will include:
+
 - Adding a No-SQL DB (Mongo) to store data for analysis.
 - Adding Security to enable Authentication & Authorisation for data analysisaccess.
 - Improving useability and 'look & feel' for the Client application.
