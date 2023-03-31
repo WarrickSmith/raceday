@@ -25,11 +25,11 @@ services:
     build: ./client
     restart: always
     ports:
-      - '3002:3000'
+      - '4000:3000'
     depends_on:
       - server
-    # environment:
-    #   - REACT_APP_API_URL=https://warricksmith.com/reservationizrapi
+    environment:
+      - REACT_APP_API_URL=https://warricksmith.com/reservationizrapi
     #   - REACT_APP_AUTH0_DOMAIN=dev-2cf59a31.us.auth0.com
     #   - REACT_APP_AUTH0_CLIENT_ID=rrwygXFgF8LgSGhV4ufVQprovN3iITpD
     #   - REACT_APP_AUTH0_AUDIENCE=https://reservationizr.com
