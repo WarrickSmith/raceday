@@ -29,7 +29,7 @@ services:
     depends_on:
       - server
     environment:
-      - REACT_APP_API_URL=https://warricksmith.com/reservationizrapi
+      - REACT_APP_API_URL=https://warricksmith.com/racedayapi
     #   - REACT_APP_AUTH0_DOMAIN=dev-2cf59a31.us.auth0.com
     #   - REACT_APP_AUTH0_CLIENT_ID=rrwygXFgF8LgSGhV4ufVQprovN3iITpD
     #   - REACT_APP_AUTH0_AUDIENCE=https://reservationizr.com
