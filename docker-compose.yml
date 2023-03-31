@@ -1,20 +1,42 @@
-version: "3"
+# version: "3"
+# services:
+#   client:
+#     build:
+#       context: ./client
+#     ports:
+#       - "3000:3000"
+#     depends_on:
+#       - server
+#     volumes:
+#       - ./client:/app
+#       - /app/node_modules
+#   server:
+#     build:
+#       context: ./server
+#     ports:
+#       - "5000:5000"
+#     volumes:
+#       - ./server:/app
+#       - /app/node_modules
+
+version: '3.8'
 services:
   client:
-    build:
-      context: ./client
+    build: ./client
+    restart: always
     ports:
-      - "3000:3000"
+      - '3002:3000'
     depends_on:
       - server
-    volumes:
-      - ./client:/app
-      - /app/node_modules
+    # environment:
+    #   - REACT_APP_API_URL=https://warricksmith.com/reservationizrapi
+    #   - REACT_APP_AUTH0_DOMAIN=dev-2cf59a31.us.auth0.com
+    #   - REACT_APP_AUTH0_CLIENT_ID=rrwygXFgF8LgSGhV4ufVQprovN3iITpD
+    #   - REACT_APP_AUTH0_AUDIENCE=https://reservationizr.com
+    #   - REACT_APP_AUTH0_REDIRECT_URI=https://warricksmith.com/reservationizr
+
   server:
-    build:
-      context: ./server
+    build: ./server
+    restart: always
     ports:
-      - "5000:5000"
-    volumes:
-      - ./server:/app
-      - /app/node_modules
+      - '5000:5000'
