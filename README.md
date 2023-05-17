@@ -83,7 +83,7 @@ The client and Server apps can be stood up from the terminal, however, to run up
    ```sh
    CD server
    npm install
-   napm satrt
+   npm start
    ```
 3. Alternatively, both client and server can be started in Docker from the root directory...
    ```JS
