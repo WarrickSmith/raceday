@@ -15,7 +15,6 @@
     "cors": "^2.8.5",
     "express": "^4.17.2",
     "js-yaml": "^4.1.0",
-    "node-fetch": "^2.7.0",
     "nodemon": "^2.0.15",
     "swagger-ui-express": "^4.3.0"
   },

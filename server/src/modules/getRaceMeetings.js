@@ -2,19 +2,20 @@
 
 // REf URL to get active links for todays racing -  "https://api.beta.tab.com.au/v1/tab-info-service/racing/dates/YYYY-MM-DD/meetings?jurisdiction=NSW"
 // This will return an array with todays race meetings
-
-const getRaceMeetings = async (req, res, next) => {
+const getRaceMeetings = async () => {
   const today = new Date()
   const year = today.getFullYear()
-  const month = ('0' + (today.getMonth() + 1)).slice(-2)
-  const day = ('0' + today.getDate()).slice(-2)
+  const month = String(today.getMonth() + 1).padStart(2, '0')
+  const day = String(today.getDate()).padStart(2, '0')
   const date = `${year}-${month}-${day}`
   const jurisdiction = 'NSW'
 
   try {
     // Fetch object containing links to meetings for the specified date
     const url = `https://api.beta.tab.com.au/v1/tab-info-service/racing/dates/${date}/meetings?jurisdiction=${jurisdiction}`
-    const response = await fetch(url)
+    const response = await fetch(url, {
+      headers: { Accept: 'application/json' },
+    })
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
