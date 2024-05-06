@@ -8,48 +8,47 @@
 // - sort raceData  by race start Time
 // - return raceData array
 
-const getRaceMeetings = require("./getRaceMeetings.js");
-const getAllMeetingRaces = require("./getAllMeetingRaces");
-const getRace = require("./getRace");
-const fetch = require("node-fetch"); // Used to support asynch-await-fetch
+const getRaceMeetings = require('./getRaceMeetings.js')
+const getAllMeetingRaces = require('./getAllMeetingRaces')
+const getRace = require('./getRace')
 
 const getAllRaces = async (next) => {
   try {
     // - fetch all race meetings from getRaceMeetings module.
-    const raceMeetings = await getRaceMeetings();
-    const allMeetings = raceMeetings.meetings;
-    console.log(`Number of meetings: ${allMeetings.length}`);
+    const raceMeetings = await getRaceMeetings()
+    const allMeetings = raceMeetings.meetings
+    console.log(`Number of meetings: ${allMeetings.length}`)
 
     // - Parse raceMeetings array and map result, returning an array of links to all of a meetings races (allRaceLinks)
     const allRaceLinks = allMeetings
       .map((meeting, index) => {
         if (meeting._links !== undefined) {
-          return meeting._links.races;
+          return meeting._links.races
         }
       })
-      .filter((notUndefined) => notUndefined !== undefined);
+      .filter((notUndefined) => notUndefined !== undefined)
 
     // - Parse allRaceLinks array and map result, returning an array of links to individual races  (allRaces)
-    console.log("Parsing Race links...");
+    console.log('Parsing Race links...')
     let allRaces = await Promise.all(
       allRaceLinks
         .map(async (race) => {
-          const result = await getAllMeetingRaces(race);
+          const result = await getAllMeetingRaces(race)
           const raceList = result.races.map((race) => {
-            return race._links.self;
-          });
-          return raceList;
+            return race._links.self
+          })
+          return raceList
         })
         .filter((notUndefined) => notUndefined !== undefined)
-    );
-    allRaces = allRaces.flat(); // Flatten theallRaces array from '[[w,x],[y,z]] to [w,x,y,z]
+    )
+    allRaces = allRaces.flat() // Flatten theallRaces array from '[[w,x],[y,z]] to [w,x,y,z]
 
     // - Parse allRaces and return an array 'subset' individual race details (raceData) and a link to the race for furture race detail fetch/refresh
-    console.log("Parsing Races...");
+    console.log('Parsing Races...')
     const raceData = await Promise.all(
       allRaces
         .map(async (race) => {
-          const result = await getRace(race);
+          const result = await getRace(race)
           const raceDetail = [
             {
               RaceLink: race,
@@ -65,23 +64,23 @@ const getAllRaces = async (next) => {
               RaceType: result.meeting.raceType,
               MeetingCode: result.meeting.meetingCode,
             },
-          ];
+          ]
 
-          return raceDetail;
+          return raceDetail
         })
         .filter((notUndefined) => notUndefined !== undefined)
-    );
+    )
 
     // NOTE: Could return multiple objects within an object, ie, raceMeetisgs, allRaces
-    console.log("Returning Race Data...");
+    console.log('Returning Race Data...')
     return raceData
       .flat()
       .sort((a, b) =>
         new Date(a.RaceStartTime) > new Date(b.RaceStartTime) ? 1 : -1
-      ); // Flatten the raceData array of objects from '[[{w,x},{y,z}]] to [{w,x},{y,z}] THEN sort ascending by RaceStartTime
+      ) // Flatten the raceData array of objects from '[[{w,x},{y,z}]] to [{w,x},{y,z}] THEN sort ascending by RaceStartTime
   } catch (err) {
-    next(err);
+    next(err)
   }
-};
+}
 
-module.exports = getAllRaces;
+module.exports = getAllRaces

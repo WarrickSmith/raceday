@@ -4,21 +4,19 @@
 
 // This function will return an object with race details for the provided race URL
 
-const fetch = require("node-fetch"); // Used to support asynch-await-fetch
-
 const getRace = async (raceUrl, next) => {
   try {
     // Fetch object containing races for 'today'
     const result = await fetch(raceUrl, {
       headers: {
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json',
       },
-    });
-    const race = await result.json();
-    return race;
+    })
+    const race = await result.json()
+    return race
   } catch (err) {
-    next(error);
+    next(error)
   }
-};
+}
 
-module.exports = getRace;
+module.exports = getRace
