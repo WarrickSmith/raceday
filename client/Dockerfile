@@ -1,15 +1,3 @@
-# FROM node:16
-# WORKDIR /app
-# ENV CHOKIDAR_USEPOLLING=true
-# COPY package*.json /app/
-# RUN ["npm", "install"]
-# RUN npm run build
-# ENV NODE_ENV production
-# COPY . /app
-# EXPOSE 3000
-# CMD [ "npx", "serve", "build" ]
-# ENTRYPOINT [ "npm","start" ]
-
 # Use an official Node runtime as a parent image
 FROM node:16-alpine
 

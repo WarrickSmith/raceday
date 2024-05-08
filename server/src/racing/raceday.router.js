@@ -15,7 +15,8 @@ router.get('/racemeetings', async (request, response, next) => {
     console.log('\x1b[36m%s\x1b[0m', 'Meetings Fetched Successfully!')
     return response.status(200).send(result)
   } catch (err) {
-    next(err)
+    console.log('ERROR : ', err)
+    throw err
   }
 })
 
@@ -27,7 +28,8 @@ router.get('/allraces', async (request, response, next) => {
     console.log('\x1b[36m%s\x1b[0m', 'All Races fetched!')
     return response.status(200).send(result)
   } catch (err) {
-    next(err)
+    console.log('ERROR : ', err)
+    throw err
   }
 })
 
@@ -40,7 +42,8 @@ router.get('/allmeetingraces/', async (request, response, next) => {
     console.log('\x1b[36m%s\x1b[0m', 'All Races for Meeting Fetched')
     return response.status(200).send(result)
   } catch (err) {
-    next(err)
+    console.log('ERROR : ', err)
+    throw err
   }
 })
 
@@ -57,7 +60,8 @@ router.get('/race/', async (request, response, next) => {
     console.log('\x1b[36m%s\x1b[0m', 'Single Race Data Fetched!')
     return response.status(200).send(result)
   } catch (err) {
-    next(err)
+    console.log('ERROR : ', err)
+    throw err
   }
 })
 
@@ -68,7 +72,8 @@ router.get('*', async (request, response, next) => {
     console.log('\x1b[36m%s\x1b[0m', 'Invalid URL Path Detected! ', url)
     throw Error(`Invalid URL: ${url}`)
   } catch (err) {
-    next(err)
+    console.log('ERROR : ', err)
+    throw err
   }
 })
 
