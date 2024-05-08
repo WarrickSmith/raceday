@@ -52,17 +52,17 @@ const getAllRaces = async (next) => {
           const raceDetail = [
             {
               RaceLink: race,
-              RaceStartTime: result.raceStartTime,
-              RaceNumber: result.raceNumber,
-              RaceName: result.raceName,
-              RaceDistance: result.raceDistance,
-              RaceStatus: result.raceStatus,
-              MeetingName: result.meeting.meetingName,
-              VenueMnemonic: result.meeting.venueMnemonic,
-              MeetingDate: result.meeting.meetingDate,
-              Location: result.meeting.location,
-              RaceType: result.meeting.raceType,
-              MeetingCode: result.meeting.meetingCode,
+              RaceStartTime: result?.raceStartTime,
+              RaceNumber: result?.raceNumber,
+              RaceName: result?.raceName,
+              RaceDistance: result?.raceDistance,
+              RaceStatus: result?.raceStatus,
+              MeetingName: result?.meeting.meetingName,
+              VenueMnemonic: result?.meeting.venueMnemonic,
+              MeetingDate: result?.meeting.meetingDate,
+              Location: result?.meeting.location,
+              RaceType: result?.meeting.raceType,
+              MeetingCode: result?.meeting.meetingCode,
             },
           ]
 

@@ -22,7 +22,7 @@ RUN npm install
 COPY . .
 
 # Set the environment variable to production
-ENV NODE_ENV=production
+# ENV NODE_ENV=production
 
 # Expose port 5000
 EXPOSE 5000

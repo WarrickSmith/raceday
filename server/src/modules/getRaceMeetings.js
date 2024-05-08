@@ -3,7 +3,10 @@
 // REf URL to get active links for todays racing -  "https://api.beta.tab.com.au/v1/tab-info-service/racing/dates/YYYY-MM-DD/meetings?jurisdiction=NSW"
 // This will return an array with todays race meetings
 const getRaceMeetings = async () => {
-  const today = new Date()
+  const timeZone = 'Australia/Sydney'
+  const today = new Date(
+    new Intl.DateTimeFormat('en-US', { timeZone }).format()
+  )
   const year = today.getFullYear()
   const month = String(today.getMonth() + 1).padStart(2, '0')
   const day = String(today.getDate()).padStart(2, '0')
