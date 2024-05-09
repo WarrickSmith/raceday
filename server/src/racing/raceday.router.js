@@ -16,7 +16,7 @@ router.get('/racemeetings', async (request, response, next) => {
     return response.status(200).send(result)
   } catch (err) {
     console.log('ERROR : ', err)
-    throw err
+    return response.status(500).send(err)
   }
 })
 
@@ -29,7 +29,7 @@ router.get('/allraces', async (request, response, next) => {
     return response.status(200).send(result)
   } catch (err) {
     console.log('ERROR : ', err)
-    throw err
+    return response.status(500).send(err)
   }
 })
 
@@ -43,7 +43,7 @@ router.get('/allmeetingraces/', async (request, response, next) => {
     return response.status(200).send(result)
   } catch (err) {
     console.log('ERROR : ', err)
-    throw err
+    return response.status(500).send(err)
   }
 })
 
@@ -61,7 +61,7 @@ router.get('/race/', async (request, response, next) => {
     return response.status(200).send(result)
   } catch (err) {
     console.log('ERROR : ', err)
-    throw err
+    return response.status(500).send(err)
   }
 })
 
@@ -73,7 +73,7 @@ router.get('*', async (request, response, next) => {
     throw Error(`Invalid URL: ${url}`)
   } catch (err) {
     console.log('ERROR : ', err)
-    throw err
+    return response.status(500).send(err)
   }
 })
 
