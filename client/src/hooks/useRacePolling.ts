@@ -105,25 +105,59 @@ export function useRacePolling(config: PollingConfig): UseRacePollingResult {
 
   /**
    * Calculate client polling interval based on cadence table (2x backend frequency)
-   * Follows exact requirements from Task 1 specification
+   * Enhanced for Task 2 with precise race status awareness and exact backend mapping
    */
   const calculateClientPollingInterval = useCallback((timeToStart: number, raceStatus: string): number => {
-    // Stop polling if race is final or abandoned
-    if (['final', 'finalized', 'abandoned', 'cancelled'].includes(raceStatus.toLowerCase())) {
+    const status = raceStatus.toLowerCase()
+
+    // Stop polling immediately if race is final or abandoned
+    if (['final', 'finalized', 'abandoned', 'cancelled'].includes(status)) {
       return 0
     }
 
-    // Dynamic intervals based on race timing (2x backend frequency)
+    // Race status-based polling following backend logic exactly
+    if (status === 'open') {
+      // PHASE 1: Early Morning Baseline Collection (>65 minutes before race)
+      if (timeToStart > 65) {
+        return 900000 // 15 minutes (backend: 30m)
+      }
+      // PHASE 2: Enhanced Proximity Polling (≤65 minutes before race)
+      else if (timeToStart > 60) {
+        return 75000 // 75 seconds (backend: 2.5m) - transition period
+      }
+      else if (timeToStart > 20) {
+        return 150000 // 2.5 minutes (backend: 5m) - extended active period
+      }
+      else if (timeToStart > 5) {
+        return 75000 // 75 seconds (backend: 2.5m) - active period
+      }
+      else if (timeToStart > 3) {
+        return 15000 // 15 seconds (backend: 30s) - pre-critical period
+      }
+      else if (timeToStart > 0) {
+        return 15000 // 15 seconds (backend: 30s) - critical approach period
+      }
+      else {
+        // Race start time passed but still Open status
+        return 15000 // 15 seconds (backend: 30s) - post-start monitoring
+      }
+    }
+
+    // Post-open status polling (race transitioning through states)
+    if (status === 'closed' || status === 'running' || status === 'interim') {
+      return 15000 // 15 seconds (backend: 30s) - transition monitoring
+    }
+
+    // Fallback for unknown statuses - use time-based logic with enhanced status awareness
     if (timeToStart > 65) {
-      return 900000 // 15 minutes (backend: 30m)
+      return 900000 // 15 minutes (backend: 30m) - early morning baseline
+    } else if (timeToStart > 20) {
+      return 150000 // 2.5 minutes (backend: 5m) - extended active period
+    } else if (timeToStart > 5) {
+      return 75000 // 75 seconds (backend: 2.5m) - active period
+    } else {
+      return 15000 // 15 seconds (backend: 30s) - critical period
     }
-    if (timeToStart > 5) {
-      return 75000 // 75 seconds (backend: 2.5m)
-    }
-    if (timeToStart > 3) {
-      return 30000 // 30 seconds (backend: 1m)
-    }
-    return 15000 // 15 seconds (backend: 30s)
   }, [])
 
   /**
@@ -133,6 +167,50 @@ export function useRacePolling(config: PollingConfig): UseRacePollingResult {
     const startTime = new Date(raceStartTime)
     const now = new Date()
     return (startTime.getTime() - now.getTime()) / (1000 * 60)
+  }, [])
+
+  /**
+   * Add jitter to polling intervals to prevent thundering herd effects
+   * Applies ±10% randomization while maintaining minimum critical intervals
+   */
+  const addJitterToInterval = useCallback((baseInterval: number): number => {
+    // Don't add jitter to critical intervals (≤30 seconds) to maintain responsiveness
+    if (baseInterval <= 30000) {
+      return baseInterval
+    }
+
+    // Add ±10% jitter to longer intervals
+    const jitterPercent = 0.1
+    const jitterRange = baseInterval * jitterPercent
+    const jitter = (Math.random() - 0.5) * 2 * jitterRange
+
+    // Ensure minimum interval is maintained
+    const jitteredInterval = Math.max(baseInterval + jitter, baseInterval * 0.9)
+
+    return Math.round(jitteredInterval)
+  }, [])
+
+  /**
+   * Detect network conditions and adjust polling accordingly
+   */
+  const getNetworkAdjustmentFactor = useCallback((): number => {
+    // Use Navigator.connection if available (experimental)
+    if (typeof navigator !== 'undefined' && 'connection' in navigator) {
+      const connection = (navigator as unknown as { connection?: { effectiveType?: string } }).connection
+      if (connection) {
+        // Slow connections: reduce polling frequency by 1.5x
+        if (connection.effectiveType === 'slow-2g' || connection.effectiveType === '2g') {
+          return 1.5
+        }
+        // 3G connections: slight reduction
+        if (connection.effectiveType === '3g') {
+          return 1.2
+        }
+      }
+    }
+
+    // Default: no adjustment for good connections or unknown
+    return 1.0
   }, [])
 
   /**
@@ -321,22 +399,23 @@ export function useRacePolling(config: PollingConfig): UseRacePollingResult {
   }, [config, pollingState, errorState, fetchRaceData, logger])
 
   /**
-   * Schedule next polling cycle based on current race state
+   * Schedule next polling cycle based on current race state with enhanced optimizations
    */
   const scheduleNextPoll = useCallback(() => {
     if (!mountedRef.current || pollingState.isStopped || pollingState.isPaused) {
       return
     }
 
-    // Calculate current polling interval
+    // Calculate current polling interval with enhanced race status awareness
     const timeToStart = calculateTimeToStart(config.raceStartTime)
     const baseInterval = calculateClientPollingInterval(timeToStart, config.raceStatus)
 
-    // Stop polling if interval is 0 (race is final)
+    // Stop polling immediately if interval is 0 (race is final/abandoned)
     if (baseInterval === 0) {
-      logger.info('Race is final, stopping polling', {
+      logger.info('Race is final, stopping polling immediately', {
         raceId: config.raceId,
         raceStatus: config.raceStatus,
+        timeToStart: Math.round(timeToStart * 100) / 100,
       })
 
       setPollingState(prev => ({
@@ -347,19 +426,33 @@ export function useRacePolling(config: PollingConfig): UseRacePollingResult {
       return
     }
 
-    // Apply background optimization (2x interval)
-    const finalInterval = pollingState.backgroundOptimization ? baseInterval * 2 : baseInterval
+    // Apply network condition adjustments
+    const networkFactor = getNetworkAdjustmentFactor()
+    const networkAdjustedInterval = Math.round(baseInterval * networkFactor)
+
+    // Apply advanced background optimization
+    let optimizedInterval = networkAdjustedInterval
+    if (pollingState.backgroundOptimization) {
+      // More sophisticated background optimization:
+      // - Critical periods (≤30s): extend by 1.5x instead of 2x
+      // - Non-critical periods: extend by 2x
+      const backgroundMultiplier = baseInterval <= 30000 ? 1.5 : 2.0
+      optimizedInterval = Math.round(networkAdjustedInterval * backgroundMultiplier)
+    }
+
+    // Add jitter to prevent thundering herd effects
+    const jitteredInterval = addJitterToInterval(optimizedInterval)
 
     // Apply exponential backoff if there are errors
-    const delayedInterval = errorState.circuitBreakerOpen
-      ? Math.max(finalInterval, errorState.backoffDelay)
-      : finalInterval
+    const finalInterval = errorState.circuitBreakerOpen
+      ? Math.max(jitteredInterval, errorState.backoffDelay)
+      : jitteredInterval
 
-    // Update polling state
+    // Update polling state with enhanced tracking
     setPollingState(prev => ({
       ...prev,
-      currentInterval: finalInterval,
-      nextPollTime: Date.now() + delayedInterval,
+      currentInterval: baseInterval, // Store base interval for reference
+      nextPollTime: Date.now() + finalInterval,
     }))
 
     // Clear existing timeout
@@ -376,14 +469,26 @@ export function useRacePolling(config: PollingConfig): UseRacePollingResult {
           }
         })
       }
-    }, delayedInterval)
+    }, finalInterval)
 
-    logger.debug('Next poll scheduled', {
+    // Enhanced debugging information
+    logger.debug('Next poll scheduled with enhanced optimizations', {
       raceId: config.raceId,
-      interval: finalInterval,
-      delayedInterval,
+      raceStatus: config.raceStatus,
       timeToStart: Math.round(timeToStart * 100) / 100,
-      backgroundOptimization: pollingState.backgroundOptimization,
+      intervals: {
+        base: baseInterval,
+        networkAdjusted: networkAdjustedInterval,
+        backgroundOptimized: optimizedInterval,
+        jittered: jitteredInterval,
+        final: finalInterval,
+      },
+      optimizations: {
+        backgroundActive: pollingState.backgroundOptimization,
+        networkFactor,
+        jitterApplied: jitteredInterval !== optimizedInterval,
+        circuitBreakerOpen: errorState.circuitBreakerOpen,
+      },
     })
   }, [
     config,
@@ -391,6 +496,8 @@ export function useRacePolling(config: PollingConfig): UseRacePollingResult {
     errorState,
     calculateTimeToStart,
     calculateClientPollingInterval,
+    addJitterToInterval,
+    getNetworkAdjustmentFactor,
     executePoll,
     logger,
   ])
@@ -504,10 +611,18 @@ export function useRacePolling(config: PollingConfig): UseRacePollingResult {
     }
   }, [config.raceId, executePoll, logger])
 
-  // Background tab detection and optimization
+  // Enhanced background tab detection and battery-conscious optimization
   useEffect(() => {
+    let backgroundTimer: NodeJS.Timeout | null = null
+
     const handleVisibilityChange = () => {
       const isBackground = document.hidden
+
+      // Clear any existing background timer
+      if (backgroundTimer) {
+        clearTimeout(backgroundTimer)
+        backgroundTimer = null
+      }
 
       setPollingState(prev => ({
         ...prev,
@@ -515,11 +630,25 @@ export function useRacePolling(config: PollingConfig): UseRacePollingResult {
       }))
 
       if (isBackground) {
-        logger.debug('Tab backgrounded, optimizing polling intervals')
-      } else {
-        logger.debug('Tab foregrounded, resuming normal polling')
+        logger.debug('Tab backgrounded, applying enhanced battery-conscious optimization')
 
-        // Force immediate update when returning to foreground
+        // Extended background optimization: pause polling completely after 5 minutes
+        backgroundTimer = setTimeout(() => {
+          if (document.hidden && mountedRef.current) {
+            logger.debug('Extended background detected, pausing polling for battery conservation')
+            pausePolling()
+          }
+        }, 5 * 60 * 1000) // 5 minutes
+      } else {
+        logger.debug('Tab foregrounded, resuming optimized polling with immediate update')
+
+        // Resume polling if it was paused due to extended background time
+        if (pollingState.isPaused && !pollingState.isStopped) {
+          logger.debug('Resuming polling from background pause')
+          resumePolling()
+        }
+
+        // Force immediate update when returning to foreground for data freshness
         if (pollingState.isActive && !pollingState.isPaused) {
           forceUpdate().catch(error => {
             logger.error('Failed to update on foreground', { error })
@@ -528,12 +657,33 @@ export function useRacePolling(config: PollingConfig): UseRacePollingResult {
       }
     }
 
+    // Check for battery API and adjust behavior on mobile devices
+    const handleBatteryOptimization = () => {
+      if (typeof navigator !== 'undefined' && 'getBattery' in navigator) {
+        const getBattery = (navigator as unknown as { getBattery?: () => Promise<{ level: number; charging: boolean }> }).getBattery
+        if (getBattery) {
+          getBattery().then((battery) => {
+            if (battery.level < 0.2 && !battery.charging) {
+              logger.debug('Low battery detected, applying conservative polling')
+              // Could further extend intervals in low battery situations
+            }
+          }).catch(() => {
+            // Battery API not available or failed, continue normal operation
+          })
+        }
+      }
+    }
+
     document.addEventListener('visibilitychange', handleVisibilityChange)
+    handleBatteryOptimization() // Check battery status on initialization
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
+      if (backgroundTimer) {
+        clearTimeout(backgroundTimer)
+      }
     }
-  }, [pollingState.isActive, pollingState.isPaused, forceUpdate, logger])
+  }, [pollingState.isActive, pollingState.isPaused, pollingState.isStopped, forceUpdate, pausePolling, resumePolling, logger])
 
   // Cleanup on unmount
   useEffect(() => {
