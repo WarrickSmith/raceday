@@ -1,0 +1,582 @@
+/**
+ * Core Race Polling Hook - Task 1 Implementation
+ *
+ * Provides client-side polling infrastructure that follows 2x backend frequency requirements.
+ * Replaces real-time subscriptions with predictable, controllable data update mechanism.
+ *
+ * Key Features:
+ * - Dynamic intervals based on race timing and status (2x backend frequency)
+ * - Coordinated fetching for all data sources
+ * - Automatic termination when race status becomes 'final'
+ * - Comprehensive error handling with exponential backoff
+ * - Background tab optimization
+ * - Integration with existing RaceContext architecture
+ */
+
+'use client'
+
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useLogger } from '@/utils/logging'
+import type { Race, Entrant } from '@/types/meetings'
+import type { RacePoolData } from '@/types/racePools'
+
+// Polling configuration interface as specified in Task 1
+interface PollingConfig {
+  raceId: string
+  raceStartTime: string
+  raceStatus: string
+  initialData: RaceData
+  onDataUpdate: (data: RaceData) => void
+  onError: (error: Error) => void
+}
+
+// Combined race data interface for coordinated updates
+interface RaceData {
+  race: Race | null
+  entrants: Entrant[]
+  pools: RacePoolData | null
+  moneyFlowUpdateTrigger: number
+}
+
+// Polling state management
+interface PollingState {
+  isActive: boolean
+  isPaused: boolean
+  isStopped: boolean
+  currentInterval: number
+  nextPollTime: number | null
+  consecutiveErrors: number
+  lastSuccessfulPoll: Date | null
+  totalPolls: number
+  backgroundOptimization: boolean
+}
+
+// Error handling state
+interface ErrorState {
+  lastError: Error | null
+  retryAttempt: number
+  circuitBreakerOpen: boolean
+  backoffDelay: number
+}
+
+// Hook return interface
+interface UseRacePollingResult {
+  pollingState: PollingState
+  errorState: ErrorState
+  startPolling: () => void
+  pausePolling: () => void
+  resumePolling: () => void
+  stopPolling: () => void
+  forceUpdate: () => Promise<void>
+}
+
+/**
+ * Core client-side polling hook implementing Task 1 requirements
+ */
+export function useRacePolling(config: PollingConfig): UseRacePollingResult {
+  const logger = useLogger('useRacePolling')
+
+  // Polling state management
+  const [pollingState, setPollingState] = useState<PollingState>({
+    isActive: false,
+    isPaused: false,
+    isStopped: false,
+    currentInterval: 900000, // Default 15 minutes
+    nextPollTime: null,
+    consecutiveErrors: 0,
+    lastSuccessfulPoll: null,
+    totalPolls: 0,
+    backgroundOptimization: false,
+  })
+
+  // Error handling state
+  const [errorState, setErrorState] = useState<ErrorState>({
+    lastError: null,
+    retryAttempt: 0,
+    circuitBreakerOpen: false,
+    backoffDelay: 1000, // Start with 1 second
+  })
+
+  // Refs for cleanup and state management
+  const pollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const mountedRef = useRef(true)
+  const lastPollDataRef = useRef<RaceData | null>(null)
+
+  /**
+   * Calculate client polling interval based on cadence table (2x backend frequency)
+   * Follows exact requirements from Task 1 specification
+   */
+  const calculateClientPollingInterval = useCallback((timeToStart: number, raceStatus: string): number => {
+    // Stop polling if race is final or abandoned
+    if (['final', 'finalized', 'abandoned', 'cancelled'].includes(raceStatus.toLowerCase())) {
+      return 0
+    }
+
+    // Dynamic intervals based on race timing (2x backend frequency)
+    if (timeToStart > 65) {
+      return 900000 // 15 minutes (backend: 30m)
+    }
+    if (timeToStart > 5) {
+      return 75000 // 75 seconds (backend: 2.5m)
+    }
+    if (timeToStart > 3) {
+      return 30000 // 30 seconds (backend: 1m)
+    }
+    return 15000 // 15 seconds (backend: 30s)
+  }, [])
+
+  /**
+   * Calculate time to race start in minutes
+   */
+  const calculateTimeToStart = useCallback((raceStartTime: string): number => {
+    const startTime = new Date(raceStartTime)
+    const now = new Date()
+    return (startTime.getTime() - now.getTime()) / (1000 * 60)
+  }, [])
+
+  /**
+   * Coordinated data fetching for all race data sources
+   * Implements staggered requests to prevent API overload
+   */
+  const fetchRaceData = useCallback(async (): Promise<RaceData> => {
+    const { raceId } = config
+
+    if (!raceId) {
+      throw new Error('Race ID is required for polling')
+    }
+
+    // Create abort controller for request cancellation
+    const abortController = new AbortController()
+    abortControllerRef.current = abortController
+
+    try {
+      // Staggered API calls with 100ms delays between requests
+      const [raceResponse, entrantsResponse, poolsResponse, moneyFlowResponse] = await Promise.all([
+        // Race data
+        fetch(`/api/race/${raceId}`, {
+          signal: abortController.signal,
+          cache: 'no-cache'
+        }),
+
+        // Entrants data (staggered 100ms)
+        new Promise<Response>(resolve =>
+          setTimeout(() =>
+            resolve(fetch(`/api/race/${raceId}/entrants`, {
+              signal: abortController.signal,
+              cache: 'no-cache'
+            })), 100
+          )
+        ),
+
+        // Pools data (staggered 200ms)
+        new Promise<Response>(resolve =>
+          setTimeout(() =>
+            resolve(fetch(`/api/race/${raceId}/pools`, {
+              signal: abortController.signal,
+              cache: 'no-cache'
+            })), 200
+          )
+        ),
+
+        // Money flow timeline (staggered 300ms)
+        new Promise<Response>(resolve =>
+          setTimeout(() =>
+            resolve(fetch(`/api/race/${raceId}/money-flow-timeline`, {
+              signal: abortController.signal,
+              cache: 'no-cache'
+            })), 300
+          )
+        ),
+      ])
+
+      // Check all responses
+      if (!raceResponse.ok) {
+        throw new Error(`Race data fetch failed: ${raceResponse.statusText}`)
+      }
+      if (!entrantsResponse.ok) {
+        throw new Error(`Entrants data fetch failed: ${entrantsResponse.statusText}`)
+      }
+      if (!poolsResponse.ok) {
+        throw new Error(`Pools data fetch failed: ${poolsResponse.statusText}`)
+      }
+      if (!moneyFlowResponse.ok) {
+        throw new Error(`Money flow data fetch failed: ${moneyFlowResponse.statusText}`)
+      }
+
+      // Parse response data
+      const [raceData, entrantsData, poolsData] = await Promise.all([
+        raceResponse.json(),
+        entrantsResponse.json(),
+        poolsResponse.json(),
+        moneyFlowResponse.json(), // Trigger money flow update
+      ])
+
+      // Increment money flow update trigger
+      const currentTrigger = lastPollDataRef.current?.moneyFlowUpdateTrigger || 0
+
+      const combinedData: RaceData = {
+        race: raceData.race || null,
+        entrants: entrantsData.entrants || [],
+        pools: poolsData.pools || null,
+        moneyFlowUpdateTrigger: currentTrigger + 1,
+      }
+
+      lastPollDataRef.current = combinedData
+      return combinedData
+
+    } catch (error) {
+      // Clear abort controller on error
+      abortControllerRef.current = null
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        logger.debug('Polling request was cancelled')
+        throw new Error('Polling request cancelled')
+      }
+
+      throw error instanceof Error ? error : new Error('Unknown fetch error')
+    }
+  }, [config, logger])
+
+  /**
+   * Execute single polling cycle with error handling
+   */
+  const executePoll = useCallback(async (): Promise<void> => {
+    if (!mountedRef.current || pollingState.isStopped || pollingState.isPaused) {
+      return
+    }
+
+    // Check circuit breaker
+    if (errorState.circuitBreakerOpen) {
+      logger.debug('Circuit breaker open, skipping poll')
+      return
+    }
+
+    logger.debug('Executing polling cycle', {
+      raceId: config.raceId,
+      currentInterval: pollingState.currentInterval,
+      totalPolls: pollingState.totalPolls,
+    })
+
+    try {
+      const data = await fetchRaceData()
+
+      // Update polling state on success
+      setPollingState(prev => ({
+        ...prev,
+        consecutiveErrors: 0,
+        lastSuccessfulPoll: new Date(),
+        totalPolls: prev.totalPolls + 1,
+      }))
+
+      // Clear error state on success
+      setErrorState(prev => ({
+        ...prev,
+        lastError: null,
+        retryAttempt: 0,
+        circuitBreakerOpen: false,
+        backoffDelay: 1000, // Reset backoff
+      }))
+
+      // Notify parent component of data update
+      config.onDataUpdate(data)
+
+      logger.debug('Polling cycle completed successfully', {
+        raceId: config.raceId,
+        totalPolls: pollingState.totalPolls + 1,
+      })
+
+    } catch (error) {
+      const pollingError = error instanceof Error ? error : new Error('Unknown polling error')
+
+      logger.error('Polling cycle failed', {
+        raceId: config.raceId,
+        error: pollingError.message,
+        consecutiveErrors: pollingState.consecutiveErrors + 1,
+      })
+
+      // Update error state
+      setErrorState(prev => {
+        const newConsecutiveErrors = pollingState.consecutiveErrors + 1
+        const shouldOpenCircuitBreaker = newConsecutiveErrors >= 5
+        const newBackoffDelay = Math.min(prev.backoffDelay * 2, 30000) // Max 30 seconds
+
+        return {
+          lastError: pollingError,
+          retryAttempt: prev.retryAttempt + 1,
+          circuitBreakerOpen: shouldOpenCircuitBreaker,
+          backoffDelay: newBackoffDelay,
+        }
+      })
+
+      // Update polling state
+      setPollingState(prev => ({
+        ...prev,
+        consecutiveErrors: prev.consecutiveErrors + 1,
+      }))
+
+      // Notify parent component of error
+      config.onError(pollingError)
+    }
+  }, [config, pollingState, errorState, fetchRaceData, logger])
+
+  /**
+   * Schedule next polling cycle based on current race state
+   */
+  const scheduleNextPoll = useCallback(() => {
+    if (!mountedRef.current || pollingState.isStopped || pollingState.isPaused) {
+      return
+    }
+
+    // Calculate current polling interval
+    const timeToStart = calculateTimeToStart(config.raceStartTime)
+    const baseInterval = calculateClientPollingInterval(timeToStart, config.raceStatus)
+
+    // Stop polling if interval is 0 (race is final)
+    if (baseInterval === 0) {
+      logger.info('Race is final, stopping polling', {
+        raceId: config.raceId,
+        raceStatus: config.raceStatus,
+      })
+
+      setPollingState(prev => ({
+        ...prev,
+        isActive: false,
+        isStopped: true,
+      }))
+      return
+    }
+
+    // Apply background optimization (2x interval)
+    const finalInterval = pollingState.backgroundOptimization ? baseInterval * 2 : baseInterval
+
+    // Apply exponential backoff if there are errors
+    const delayedInterval = errorState.circuitBreakerOpen
+      ? Math.max(finalInterval, errorState.backoffDelay)
+      : finalInterval
+
+    // Update polling state
+    setPollingState(prev => ({
+      ...prev,
+      currentInterval: finalInterval,
+      nextPollTime: Date.now() + delayedInterval,
+    }))
+
+    // Clear existing timeout
+    if (pollTimeoutRef.current) {
+      clearTimeout(pollTimeoutRef.current)
+    }
+
+    // Schedule next poll
+    pollTimeoutRef.current = setTimeout(() => {
+      if (mountedRef.current) {
+        executePoll().then(() => {
+          if (mountedRef.current) {
+            scheduleNextPoll()
+          }
+        })
+      }
+    }, delayedInterval)
+
+    logger.debug('Next poll scheduled', {
+      raceId: config.raceId,
+      interval: finalInterval,
+      delayedInterval,
+      timeToStart: Math.round(timeToStart * 100) / 100,
+      backgroundOptimization: pollingState.backgroundOptimization,
+    })
+  }, [
+    config,
+    pollingState,
+    errorState,
+    calculateTimeToStart,
+    calculateClientPollingInterval,
+    executePoll,
+    logger,
+  ])
+
+  /**
+   * Start polling (only after initial data load succeeds)
+   */
+  const startPolling = useCallback(() => {
+    if (!config.initialData?.race) {
+      logger.warn('Cannot start polling without initial race data')
+      return
+    }
+
+    logger.info('Starting race polling', {
+      raceId: config.raceId,
+      raceStatus: config.raceStatus,
+    })
+
+    setPollingState(prev => ({
+      ...prev,
+      isActive: true,
+      isPaused: false,
+      isStopped: false,
+    }))
+
+    // Start first poll immediately
+    executePoll().then(() => {
+      if (mountedRef.current) {
+        scheduleNextPoll()
+      }
+    })
+  }, [config, executePoll, scheduleNextPoll, logger])
+
+  /**
+   * Pause polling (preserve state)
+   */
+  const pausePolling = useCallback(() => {
+    logger.debug('Pausing race polling', { raceId: config.raceId })
+
+    setPollingState(prev => ({
+      ...prev,
+      isPaused: true,
+    }))
+
+    // Clear timeout but don't stop completely
+    if (pollTimeoutRef.current) {
+      clearTimeout(pollTimeoutRef.current)
+      pollTimeoutRef.current = null
+    }
+  }, [config.raceId, logger])
+
+  /**
+   * Resume polling from paused state
+   */
+  const resumePolling = useCallback(() => {
+    if (pollingState.isStopped) {
+      logger.warn('Cannot resume stopped polling, use startPolling instead')
+      return
+    }
+
+    logger.debug('Resuming race polling', { raceId: config.raceId })
+
+    setPollingState(prev => ({
+      ...prev,
+      isPaused: false,
+    }))
+
+    scheduleNextPoll()
+  }, [config.raceId, pollingState.isStopped, scheduleNextPoll, logger])
+
+  /**
+   * Stop polling completely (requires restart)
+   */
+  const stopPolling = useCallback(() => {
+    logger.info('Stopping race polling', {
+      raceId: config.raceId,
+      totalPolls: pollingState.totalPolls,
+    })
+
+    setPollingState(prev => ({
+      ...prev,
+      isActive: false,
+      isPaused: false,
+      isStopped: true,
+    }))
+
+    // Clear timeout
+    if (pollTimeoutRef.current) {
+      clearTimeout(pollTimeoutRef.current)
+      pollTimeoutRef.current = null
+    }
+
+    // Cancel any ongoing requests
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
+  }, [config.raceId, pollingState.totalPolls, logger])
+
+  /**
+   * Force immediate update (bypass interval)
+   */
+  const forceUpdate = useCallback(async (): Promise<void> => {
+    logger.debug('Forcing immediate poll update', { raceId: config.raceId })
+
+    try {
+      await executePoll()
+    } catch (error) {
+      logger.error('Force update failed', { error })
+      throw error
+    }
+  }, [config.raceId, executePoll, logger])
+
+  // Background tab detection and optimization
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      const isBackground = document.hidden
+
+      setPollingState(prev => ({
+        ...prev,
+        backgroundOptimization: isBackground,
+      }))
+
+      if (isBackground) {
+        logger.debug('Tab backgrounded, optimizing polling intervals')
+      } else {
+        logger.debug('Tab foregrounded, resuming normal polling')
+
+        // Force immediate update when returning to foreground
+        if (pollingState.isActive && !pollingState.isPaused) {
+          forceUpdate().catch(error => {
+            logger.error('Failed to update on foreground', { error })
+          })
+        }
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [pollingState.isActive, pollingState.isPaused, forceUpdate, logger])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+
+      if (pollTimeoutRef.current) {
+        clearTimeout(pollTimeoutRef.current)
+      }
+
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
+  }, [])
+
+  // Auto-start polling if initial data is available
+  useEffect(() => {
+    if (config.initialData?.race && !pollingState.isActive && !pollingState.isStopped) {
+      startPolling()
+    }
+  }, [config.initialData, pollingState.isActive, pollingState.isStopped, startPolling])
+
+  // Monitor race status changes for auto-termination
+  useEffect(() => {
+    const raceStatus = config.raceStatus.toLowerCase()
+
+    if (['final', 'finalized', 'abandoned', 'cancelled'].includes(raceStatus) && pollingState.isActive) {
+      logger.info('Race completed, auto-stopping polling', {
+        raceId: config.raceId,
+        raceStatus,
+      })
+      stopPolling()
+    }
+  }, [config.raceStatus, config.raceId, pollingState.isActive, stopPolling, logger])
+
+  return {
+    pollingState,
+    errorState,
+    startPolling,
+    pausePolling,
+    resumePolling,
+    stopPolling,
+    forceUpdate,
+  }
+}
