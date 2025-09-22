@@ -127,35 +127,41 @@ export function useMoneyFlowTimeline(
 
   // Polling coordination state
   const [isPollingActive, setIsPollingActive] = useState(false)
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const isPollingActiveRef = useRef(false)
+  const pollingIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastPollingTimeRef = useRef<number>(0)
   const errorCountRef = useRef(0)
   const maxErrors = 5 // Circuit breaker threshold
 
+  const raceStatusRef = useRef(raceStatus ?? '')
+  const hasTimelineDataRef = useRef(false)
+
   // Calculate polling interval based on race timing (2x backend frequency)
-  const calculatePollingInterval = useCallback((timeToStart: number, status: string): number => {
-    const raceStatusLower = status.toLowerCase()
+  const calculatePollingInterval = useCallback(
+    (timeToStart: number, status?: string): number => {
+      const raceStatusLower = status?.toLowerCase() ?? ''
 
-    // Stop polling if race is final
-    if (['final', 'finalized', 'abandoned', 'cancelled'].includes(raceStatusLower)) {
-      return 0
-    }
+      // Stop polling if race is final
+      if (['final', 'finalized', 'abandoned', 'cancelled'].includes(raceStatusLower)) {
+        return 0
+      }
 
-    // Apply exact cadence table from polling plan (2x backend frequency)
-    if (raceStatusLower === 'open') {
-      if (timeToStart > 65) return 900000    // 15 minutes (backend: 30m)
-      if (timeToStart > 20) return 150000    // 2.5 minutes (backend: 5m)
-      if (timeToStart > 5) return 75000      // 75 seconds (backend: 2.5m)
-      if (timeToStart > 3) return 30000      // 30 seconds (backend: 1m)
-      return 15000                           // 15 seconds (backend: 30s)
-    }
+      // Apply exact cadence table from polling plan (2x backend frequency)
+      if (raceStatusLower === 'open') {
+        if (timeToStart > 65) return 900000 // 15 minutes (backend: 30m)
+        if (timeToStart > 5) return 75000 // 75 seconds (backend: 2.5m)
+        if (timeToStart > 3) return 30000 // 30 seconds (backend: 1m)
+        return 15000 // 15 seconds (backend: 30s)
+      }
 
-    if (['closed', 'running', 'interim'].includes(raceStatusLower)) {
-      return 15000 // 15 seconds during critical periods
-    }
+      if (['closed', 'running', 'interim'].includes(raceStatusLower)) {
+        return 15000 // 15 seconds during critical periods
+      }
 
-    return 30000 // Default 30 seconds for other states
-  }, [])
+      return 30000 // Default 30 seconds for other states
+    },
+    []
+  )
 
   // Calculate time to start from race start time
   const getTimeToStart = useCallback((): number => {
@@ -169,16 +175,25 @@ export function useMoneyFlowTimeline(
     return diffMinutes
   }, [raceStartTime])
 
+  useEffect(() => {
+    raceStatusRef.current = raceStatus ?? ''
+  }, [raceStatus])
+
+  useEffect(() => {
+    hasTimelineDataRef.current = false
+  }, [raceId, entrantKey])
+
   // Fetch money flow timeline data for all entrants with enhanced error handling
   const fetchTimelineData = useCallback(async (): Promise<boolean> => {
     if (!raceId || entrantIds.length === 0) return false
 
     // Check race status to avoid unnecessary polling for completed races
+    const normalizedStatus = raceStatus?.toLowerCase() ?? ''
     const isRaceComplete =
-      raceStatus &&
-      ['Final', 'Finalized', 'Abandoned', 'Cancelled'].includes(raceStatus)
+      normalizedStatus !== '' &&
+      ['final', 'finalized', 'abandoned', 'cancelled'].includes(normalizedStatus)
 
-    if (isRaceComplete && timelineData.size > 0) {
+    if (isRaceComplete && hasTimelineDataRef.current) {
       // Race is complete and we have timeline data, skip fetch
       return true
     }
@@ -224,6 +239,7 @@ export function useMoneyFlowTimeline(
       // Handle empty data gracefully
       if (documents.length === 0) {
         setTimelineData(new Map())
+        hasTimelineDataRef.current = false
         setLastUpdate(new Date())
         return true
       }
@@ -235,6 +251,7 @@ export function useMoneyFlowTimeline(
         loggerRef.current
       )
       setTimelineData(entrantDataMap)
+      hasTimelineDataRef.current = entrantDataMap.size > 0
       setLastUpdate(new Date())
 
       // Reset error count on successful fetch
@@ -256,7 +273,7 @@ export function useMoneyFlowTimeline(
     } finally {
       setIsLoading(false)
     }
-  }, [raceId, entrantIds, entrantKey, raceStatus, timelineData.size, maxErrors])
+  }, [raceId, entrantIds, entrantKey, raceStatus, maxErrors])
 
   // Generate timeline grid data optimized for component display
   const gridData = useMemo(() => {
@@ -463,8 +480,18 @@ export function useMoneyFlowTimeline(
   )
 
   // Start internal polling with coordinated timing
+  const stopPolling = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      clearTimeout(pollingIntervalRef.current)
+      pollingIntervalRef.current = null
+    }
+    isPollingActiveRef.current = false
+    setIsPollingActive(false)
+    loggerRef.current.debug('Money flow polling stopped')
+  }, [])
+
   const startPolling = useCallback(() => {
-    if (!raceId || entrantIds.length === 0 || !raceStartTime || !raceStatus) {
+    if (!raceId || entrantIds.length === 0 || !raceStartTime || !raceStatusRef.current) {
       return
     }
 
@@ -475,29 +502,32 @@ export function useMoneyFlowTimeline(
     }
 
     const timeToStart = getTimeToStart()
-    const interval = calculatePollingInterval(timeToStart, raceStatus)
+    const interval = calculatePollingInterval(timeToStart, raceStatusRef.current)
 
     // If interval is 0, race is finished, don't start polling
     if (interval === 0) {
+      isPollingActiveRef.current = false
       setIsPollingActive(false)
       loggerRef.current.debug('Money flow polling stopped - race is finished', {
-        raceStatus,
+        raceStatus: raceStatusRef.current,
         timeToStart
       })
       return
     }
 
+    isPollingActiveRef.current = true
     setIsPollingActive(true)
     lastPollingTimeRef.current = Date.now()
 
     const scheduleNextPoll = () => {
       const currentTimeToStart = getTimeToStart()
-      const currentInterval = calculatePollingInterval(currentTimeToStart, raceStatus)
+      const currentInterval = calculatePollingInterval(
+        currentTimeToStart,
+        raceStatusRef.current
+      )
 
       if (currentInterval === 0) {
-        // Race finished, stop polling
-        setIsPollingActive(false)
-        pollingIntervalRef.current = null
+        stopPolling()
         loggerRef.current.debug('Money flow polling auto-stopped - race finished')
         return
       }
@@ -505,17 +535,24 @@ export function useMoneyFlowTimeline(
       pollingIntervalRef.current = setTimeout(async () => {
         // Staggered delay to coordinate with main polling cycle (100-300ms)
         const staggerDelay = Math.random() * 200 + 100
-        await new Promise(resolve => setTimeout(resolve, staggerDelay))
+        await new Promise((resolve) => setTimeout(resolve, staggerDelay))
 
         const success = await fetchTimelineData()
 
-        if (success && isPollingActive) {
+        if (success && isPollingActiveRef.current) {
           scheduleNextPoll() // Schedule next poll if successful and still active
-        } else if (!success && errorCountRef.current < maxErrors) {
+        } else if (
+          !success &&
+          errorCountRef.current < maxErrors &&
+          isPollingActiveRef.current
+        ) {
           // Exponential backoff on error
-          const backoffDelay = Math.min(1000 * Math.pow(2, errorCountRef.current), 30000)
-          setTimeout(() => {
-            if (isPollingActive) {
+          const backoffDelay = Math.min(
+            1000 * Math.pow(2, errorCountRef.current),
+            30000
+          )
+          pollingIntervalRef.current = setTimeout(() => {
+            if (isPollingActiveRef.current) {
               scheduleNextPoll()
             }
           }, backoffDelay)
@@ -525,7 +562,7 @@ export function useMoneyFlowTimeline(
 
     // Initial fetch then start polling cycle
     fetchTimelineData().then((success) => {
-      if (success && isPollingActive) {
+      if (success && isPollingActiveRef.current) {
         scheduleNextPoll()
       }
     })
@@ -533,28 +570,28 @@ export function useMoneyFlowTimeline(
     loggerRef.current.debug('Money flow polling started', {
       interval,
       timeToStart,
-      raceStatus
+      raceStatus: raceStatusRef.current
     })
-  }, [raceId, entrantIds, raceStartTime, raceStatus, getTimeToStart, calculatePollingInterval, fetchTimelineData, isPollingActive, maxErrors])
-
-  // Stop internal polling
-  const stopPolling = useCallback(() => {
-    if (pollingIntervalRef.current) {
-      clearTimeout(pollingIntervalRef.current)
-      pollingIntervalRef.current = null
-    }
-    setIsPollingActive(false)
-    loggerRef.current.debug('Money flow polling stopped')
-  }, [])
+  }, [
+    raceId,
+    entrantIds,
+    raceStartTime,
+    getTimeToStart,
+    calculatePollingInterval,
+    fetchTimelineData,
+    maxErrors,
+    stopPolling
+  ])
 
   // Set up polling lifecycle management
   useEffect(() => {
     if (!raceId || entrantIds.length === 0) return
 
     // Check if race is complete to avoid unnecessary polling
+    const normalizedStatus = raceStatus?.toLowerCase() ?? ''
     const isRaceComplete =
-      raceStatus &&
-      ['Final', 'Finalized', 'Abandoned', 'Cancelled'].includes(raceStatus)
+      normalizedStatus !== '' &&
+      ['final', 'finalized', 'abandoned', 'cancelled'].includes(normalizedStatus)
 
     if (isRaceComplete) {
       // Race is complete, stop any polling and do final fetch if needed
@@ -586,13 +623,17 @@ export function useMoneyFlowTimeline(
     }
   }, [raceId, entrantIds, entrantKey, raceStatus, raceStartTime, startPolling, stopPolling, fetchTimelineData, timelineData.size])
 
+  const refetch = useCallback(async () => {
+    await fetchTimelineData()
+  }, [fetchTimelineData])
+
   return {
     timelineData,
     gridData,
     isLoading,
     error,
     lastUpdate,
-    refetch: async () => { await fetchTimelineData(); },
+    refetch,
     getEntrantDataForInterval,
     getWinPoolData,
     getPlacePoolData,

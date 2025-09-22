@@ -429,6 +429,11 @@ The money flow timeline needs its own hook that coordinates with the main pollin
 **Implementation Summary**:
 Successfully implemented polling coordination for the money flow timeline hook with comprehensive integration to the main polling architecture. The implementation extends the existing `useMoneyFlowTimeline` hook with polling capabilities that coordinate with `useUnifiedRaceRealtime`.
 
+**Change Notes (Review Fixes)**:
+- Corrected the client cadence calculator to follow the documented 2× backend schedule (15m → 75s → 30s → 15s) and to normalize race status comparisons so `final`/`abandoned` states reliably halt polling.
+- Hardened the polling lifecycle by tracking active state with refs, clearing both interval and backoff timers, and resetting race-aware flags when inputs change to prevent skipped schedules or lingering timeouts.
+- Added normalized timeline completion checks to avoid redundant post-final fetches while still fetching once for races that complete without prior data, and stabilized the `refetch` callback to eliminate duplicate fetch loops on update triggers.
+
 **Key Implementation Features**:
 1. **✅ Polling Coordination Implemented**:
    - Added `updateTrigger` parameter to coordinate with main polling cycle
