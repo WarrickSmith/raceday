@@ -32,37 +32,40 @@ export function useRaceNavigation({
   });
   
   const router = useRouter();
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Clear timeouts on unmount
+  // Ref to track if we're mounted to prevent state updates after unmount
+  const isMountedRef = useRef(true);
+
   useEffect(() => {
     return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
+      isMountedRef.current = false;
     };
   }, []);
 
-  // Reset navigation state when currentRaceId changes
+  // Reset navigation state when currentRaceId changes with debouncing
   useEffect(() => {
     console.log('🔄 Race navigation: currentRaceId changed to', currentRaceId);
-    setNavigationState({
-      isNavigating: false,
-      navigationTarget: null,
-      error: null,
-    });
+
+    // Debounce rapid currentRaceId changes during navigation
+    const timeoutId = setTimeout(() => {
+      if (isMountedRef.current) {
+        setNavigationState({
+          isNavigating: false,
+          navigationTarget: null,
+          error: null,
+        });
+      }
+    }, 50);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
   }, [currentRaceId]);
 
-  // Navigation helper function with timeout protection and fallbacks
+  // Simplified navigation function - no cleanup needed with polling
   const navigateToRace = useCallback(
-    async (raceId: string, navigationTarget: string) => {
-      const startTime = Date.now();
+    (raceId: string, navigationTarget: string) => {
       console.log(`🚀 [${new Date().toISOString()}] Starting navigation to race ${raceId} (${navigationTarget})`);
-      
-      // Clear any existing timeout
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
 
       setNavigationState({
         isNavigating: true,
@@ -71,55 +74,45 @@ export function useRaceNavigation({
       });
 
       try {
-        await onNavigationStart?.(navigationTarget);
-        
-        // Navigate immediately - cleanup is non-blocking
+        // Call optional navigation start callback (non-blocking)
+        onNavigationStart?.(navigationTarget);
+
+        // Navigate immediately
         router.push(`/race/${raceId}`);
-        
-        // Set timeout protection - if navigation doesn't complete in 3 seconds, try fallback
-        timeoutRef.current = setTimeout(() => {
-          const elapsed = Date.now() - startTime;
-          console.warn(`⚠️ Navigation timeout after ${elapsed}ms, trying fallback for race ${raceId}`);
-          
-          // Fallback: use window.location for more reliable navigation
-          try {
-            window.location.href = `/race/${raceId}`;
-          } catch (fallbackError) {
-            console.error('❌ Fallback navigation also failed:', fallbackError);
-            setNavigationState({
-              isNavigating: false,
-              navigationTarget: null,
-              error: 'Navigation failed - please refresh the page',
-            });
-            onError?.(new Error('Navigation timeout - please refresh the page'));
-          }
-        }, 3000);
-        
+        console.log(`✅ Navigation initiated to race ${raceId}`);
+
+        // Reset navigation state after successful navigation
+        setNavigationState({
+          isNavigating: false,
+          navigationTarget: null,
+          error: null,
+        });
+
+        // Call completion callback
+        onNavigationComplete?.();
+
       } catch (error) {
-        const elapsed = Date.now() - startTime;
         const errorMessage = error instanceof Error ? error.message : 'Navigation failed';
-        console.error(`❌ [${elapsed}ms] Navigation to ${navigationTarget} failed:`, error);
-        
+        console.error(`❌ Navigation to ${navigationTarget} failed:`, error);
+
         setNavigationState({
           isNavigating: false,
           navigationTarget: null,
           error: errorMessage,
         });
-        
+
         onError?.(error instanceof Error ? error : new Error(errorMessage));
       }
     },
-    [router, onNavigationStart, onError]
+    [router, onNavigationStart, onNavigationComplete, onError]
   );
 
-  // Navigation handlers for each button type
-  const navigateToMeetings = useCallback(async () => {
-    const startTime = Date.now();
+  // Simplified meetings navigation - no cleanup needed with polling
+  const navigateToMeetings = useCallback(() => {
     console.log(`🏠 [${new Date().toISOString()}] Starting navigation to meetings`);
-    
-    // Clear any existing timeout
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
+
+    if (!isMountedRef.current) {
+      return;
     }
 
     setNavigationState({
@@ -129,42 +122,26 @@ export function useRaceNavigation({
     });
 
     try {
-      await onNavigationStart?.('meetings');
+      // Call optional navigation start callback (non-blocking)
+      onNavigationStart?.('meetings');
+
+      // Navigate immediately
       router.push('/');
-      
-      // Set a timeout to reset state in case the meetings page doesn't unmount this component
-      timeoutRef.current = setTimeout(() => {
-        const elapsed = Date.now() - startTime;
-        
-        if (elapsed > 2000) {
-          console.warn(`⚠️ Meetings navigation timeout after ${elapsed}ms, trying fallback`);
-          // Fallback for meetings page
-          try {
-            window.location.href = '/';
-          } catch (fallbackError) {
-            console.error('❌ Meetings fallback navigation failed:', fallbackError);
-            onError?.(new Error('Navigation to meetings failed - please refresh the page'));
-          }
-        }
-        
-        setNavigationState({
-          isNavigating: false,
-          navigationTarget: null,
-          error: null,
-        });
+      console.log(`✅ Navigation initiated to meetings`);
+
+      // Call completion callback
       onNavigationComplete?.();
-      }, 3000);
+
     } catch (error) {
-      const elapsed = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : 'Navigation to meetings failed';
-      console.error(`❌ [${elapsed}ms] Navigation to meetings failed:`, error);
-      
+      console.error(`❌ Navigation to meetings failed:`, error);
+
       setNavigationState({
         isNavigating: false,
         navigationTarget: null,
         error: errorMessage,
       });
-      
+
       onError?.(error instanceof Error ? error : new Error(errorMessage));
     }
   }, [router, onNavigationStart, onNavigationComplete, onError]);

@@ -3,7 +3,6 @@
 import React, { memo } from 'react'
 import { RaceNavigationData } from '@/types/meetings'
 import { useRaceNavigation } from '@/hooks/useRaceNavigation'
-import { useRace } from '@/contexts/RaceContext'
 import { useLogger } from '@/utils/logging'
 
 interface RaceNavigationProps {
@@ -16,7 +15,6 @@ export const RaceNavigation = memo(function RaceNavigation({
   currentRaceId,
 }: RaceNavigationProps) {
   const logger = useLogger('RaceNavigation');
-  const { triggerSubscriptionCleanup } = useRace()
 
   // Debug navigation data
   logger.debug('RaceNavigation rendered', {
@@ -41,10 +39,6 @@ export const RaceNavigation = memo(function RaceNavigation({
   } = useRaceNavigation({
     navigationData,
     currentRaceId: currentRaceId || '',
-    onNavigationStart: (target) => {
-      // Trigger clean disconnection of subscriptions before navigation
-      return triggerSubscriptionCleanup(`race-navigation:${target}`)
-    },
     onError: (error) => {
       logger.error('Navigation error:', error)
     },
@@ -201,8 +195,8 @@ export const RaceNavigation = memo(function RaceNavigation({
         onClick={navigateToNext}
         disabled={navigationState.isNavigating || !canNavigateToNext}
         aria-label={
-          canNavigateToNext 
-            ? `Navigate to next race: ${navigationData.nextRace?.name}` 
+          canNavigateToNext
+            ? `Navigate to next race: ${navigationData.nextRace?.name}`
             : "No next race available"
         }
         title={
@@ -211,7 +205,6 @@ export const RaceNavigation = memo(function RaceNavigation({
             : "No next race available"
         }
       >
-        <span className="truncate">Next</span>
         {navigationState.isNavigating && navigationState.navigationTarget === 'next' ? (
           <svg className="w-4 h-4 flex-shrink-0 animate-spin" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -233,6 +226,7 @@ export const RaceNavigation = memo(function RaceNavigation({
             />
           </svg>
         )}
+        <span className="truncate">Next</span>
       </button>
 
     </div>
