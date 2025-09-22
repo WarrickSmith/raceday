@@ -227,7 +227,14 @@ export const EnhancedEntrantsGrid = memo(function EnhancedEntrantsGrid({
     getPlacePoolData,
     getOddsData,
     refetch: refetchTimeline,
-  } = useMoneyFlowTimeline(currentRaceId, entrantIds, selectedView === 'odds' ? 'win' : selectedView)
+  } = useMoneyFlowTimeline(
+    currentRaceId,
+    entrantIds,
+    selectedView === 'odds' ? 'win' : selectedView,
+    currentRace?.status,
+    moneyFlowUpdateTrigger,
+    currentRace?.startTime
+  )
 
   const [selectedEntrant, setSelectedEntrant] = useState<string | undefined>()
 
