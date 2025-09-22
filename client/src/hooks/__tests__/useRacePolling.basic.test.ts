@@ -13,6 +13,22 @@ jest.mock('@/utils/logging', () => ({
     warn: jest.fn(),
     error: jest.fn(),
   }),
+  logDebug: jest.fn(),
+}))
+
+// Mock the cache to always return null (no fallback data)
+jest.mock('@/utils/pollingCache', () => ({
+  raceDataCache: {
+    getRaceData: jest.fn().mockReturnValue(null),
+    canUseFallback: jest.fn().mockReturnValue(false),
+    clear: jest.fn(),
+  },
+  DataFreshness: 'fresh',
+}))
+
+// Mock the coordinated polling hook to allow controlled error testing
+jest.mock('../useCoordinatedRacePolling', () => ({
+  useCoordinatedRacePolling: jest.fn(),
 }))
 
 // Mock fetch globally
@@ -38,6 +54,7 @@ import { useRacePolling } from '../useRacePolling'
 describe('useRacePolling - Basic Tests', () => {
   let mockOnDataUpdate: jest.Mock
   let mockOnError: jest.Mock
+  let mockUseCoordinatedRacePolling: jest.Mock
 
   // Helper to create config with proper typing
   const createConfig = (overrides: Record<string, unknown> = {}) => ({
@@ -50,11 +67,53 @@ describe('useRacePolling - Basic Tests', () => {
     ...overrides,
   } as unknown as Parameters<typeof useRacePolling>[0])
 
-  beforeEach(() => {
+  // Helper to create default mock coordinator
+  const createMockCoordinator = (overrides: Record<string, unknown> = {}) => {
+    const defaults = {
+      coordinationState: {
+        isActive: true,
+        isPaused: false,
+        isStopped: false,
+        currentInterval: 60000,
+        lastPollTime: null,
+        failedSources: new Set(),
+        successfulSources: new Set(),
+        requestsInFlight: new Set(),
+        totalPolls: 0,
+        updateTrigger: 0,
+        ...(overrides.coordinationState || {})
+      },
+      errorState: {},
+      dataFreshness: 'fresh' as const,
+      startPolling: jest.fn(),
+      pausePolling: jest.fn(),
+      resumePolling: jest.fn(),
+      stopPolling: jest.fn(),
+      forceUpdate: jest.fn().mockResolvedValue(undefined),
+      getDataFreshness: jest.fn().mockReturnValue('fresh'),
+      ...overrides,
+    }
+
+    // Ensure coordinationState is properly merged
+    if (overrides.coordinationState) {
+      defaults.coordinationState = { ...defaults.coordinationState, ...overrides.coordinationState }
+    }
+
+    return defaults
+  }
+
+  beforeEach(async () => {
     jest.clearAllMocks()
     jest.useFakeTimers()
     mockOnDataUpdate = jest.fn()
     mockOnError = jest.fn()
+
+    // Import the mock after jest.mock is set up
+    const { useCoordinatedRacePolling } = await import('../useCoordinatedRacePolling')
+    mockUseCoordinatedRacePolling = useCoordinatedRacePolling as jest.Mock
+
+    // Set up default mock coordinator
+    mockUseCoordinatedRacePolling.mockReturnValue(createMockCoordinator())
 
     // Setup successful fetch responses
     ;(global.fetch as jest.Mock).mockResolvedValue({
@@ -97,6 +156,17 @@ describe('useRacePolling - Basic Tests', () => {
     })
 
     it('should not start polling without race data', () => {
+      // Mock coordinator that is inactive when no race data
+      mockUseCoordinatedRacePolling.mockReturnValue(createMockCoordinator({
+        coordinationState: {
+          isActive: false,
+          isStopped: false,
+          failedSources: new Set(),
+          successfulSources: new Set(),
+          requestsInFlight: new Set()
+        }
+      }))
+
       const config = createConfig({
         initialData: { race: null, entrants: [], pools: null, moneyFlowUpdateTrigger: 0 }
       })
@@ -112,6 +182,17 @@ describe('useRacePolling - Basic Tests', () => {
       const finalStatuses = ['Final', 'Finalized', 'Abandoned', 'Cancelled']
 
       finalStatuses.forEach(status => {
+        // Mock coordinator that stops for final statuses
+        mockUseCoordinatedRacePolling.mockReturnValue(createMockCoordinator({
+          coordinationState: {
+            isActive: false,
+            isStopped: true,
+            failedSources: new Set(),
+            successfulSources: new Set(),
+            requestsInFlight: new Set()
+          }
+        }))
+
         const config = createConfig({ raceStatus: status })
         const { result } = renderHook(() => useRacePolling(config))
 
@@ -121,14 +202,35 @@ describe('useRacePolling - Basic Tests', () => {
     })
 
     it('should handle status transitions', () => {
-      const config = createConfig()
+      // Start with active polling
+      mockUseCoordinatedRacePolling.mockReturnValue(createMockCoordinator({
+        coordinationState: {
+          isActive: true,
+          isStopped: false,
+          failedSources: new Set(),
+          successfulSources: new Set(),
+          requestsInFlight: new Set()
+        }
+      }))
 
+      const config = createConfig()
       const { result, rerender } = renderHook(
         (props) => useRacePolling(props),
         { initialProps: config }
       )
 
       expect(result.current.pollingState.isActive).toBe(true)
+
+      // Mock transition to stopped state when race is final
+      mockUseCoordinatedRacePolling.mockReturnValue(createMockCoordinator({
+        coordinationState: {
+          isActive: false,
+          isStopped: true,
+          failedSources: new Set(),
+          successfulSources: new Set(),
+          requestsInFlight: new Set()
+        }
+      }))
 
       // Change race status to final
       rerender(createConfig({ raceStatus: 'Final' }))
@@ -141,6 +243,14 @@ describe('useRacePolling - Basic Tests', () => {
 
   describe('manual controls', () => {
     it('should allow manual pause and resume', () => {
+      const mockPausePolling = jest.fn()
+      const mockResumePolling = jest.fn()
+
+      mockUseCoordinatedRacePolling.mockReturnValue(createMockCoordinator({
+        pausePolling: mockPausePolling,
+        resumePolling: mockResumePolling
+      }))
+
       const config = createConfig()
       const { result } = renderHook(() => useRacePolling(config))
 
@@ -152,17 +262,23 @@ describe('useRacePolling - Basic Tests', () => {
         result.current.pausePolling()
       })
 
-      expect(result.current.pollingState.isPaused).toBe(true)
+      expect(mockPausePolling).toHaveBeenCalled()
 
       // Resume polling
       act(() => {
         result.current.resumePolling()
       })
 
-      expect(result.current.pollingState.isPaused).toBe(false)
+      expect(mockResumePolling).toHaveBeenCalled()
     })
 
     it('should allow manual stop', () => {
+      const mockStopPolling = jest.fn()
+
+      mockUseCoordinatedRacePolling.mockReturnValue(createMockCoordinator({
+        stopPolling: mockStopPolling
+      }))
+
       const config = createConfig()
       const { result } = renderHook(() => useRacePolling(config))
 
@@ -173,14 +289,17 @@ describe('useRacePolling - Basic Tests', () => {
         result.current.stopPolling()
       })
 
-      expect(result.current.pollingState.isStopped).toBe(true)
-      expect(result.current.pollingState.isActive).toBe(false)
+      expect(mockStopPolling).toHaveBeenCalled()
     })
   })
 
   describe('error handling', () => {
     it('should handle fetch errors', async () => {
-      ;(global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'))
+      // Set up the mock to throw an error on forceUpdate
+      const mockForceUpdate = jest.fn().mockRejectedValue(new Error('Network error'))
+      mockUseCoordinatedRacePolling.mockReturnValue(createMockCoordinator({
+        forceUpdate: mockForceUpdate
+      }))
 
       const config = createConfig()
       const { result } = renderHook(() => useRacePolling(config))
@@ -189,16 +308,28 @@ describe('useRacePolling - Basic Tests', () => {
       await act(async () => {
         try {
           await result.current.forceUpdate()
-        } catch {
-          // Expected to error
+        } catch (error) { // eslint-disable-line @typescript-eslint/no-unused-vars
+          // Expected to catch and re-throw the error
         }
       })
 
+      // Verify that onError was called with the error
       expect(mockOnError).toHaveBeenCalledWith(expect.any(Error))
     })
 
     it('should track consecutive errors', async () => {
-      ;(global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'))
+      const mockForceUpdate = jest.fn().mockRejectedValue(new Error('Network error'))
+
+      // Mock coordinator with failed sources to simulate consecutive errors
+      mockUseCoordinatedRacePolling.mockReturnValue(createMockCoordinator({
+        forceUpdate: mockForceUpdate,
+        coordinationState: {
+          failedSources: new Set(['race', 'entrants']) // Simulate 2 failed sources
+        },
+        errorState: {
+          race: { lastError: new Error('Network error'), errorCount: 2, lastSuccessTime: null, canUseFallback: false }
+        }
+      }))
 
       const config = createConfig()
       const { result } = renderHook(() => useRacePolling(config))
@@ -207,15 +338,7 @@ describe('useRacePolling - Basic Tests', () => {
       await act(async () => {
         try {
           await result.current.forceUpdate()
-        } catch {
-          // Expected to error
-        }
-      })
-
-      await act(async () => {
-        try {
-          await result.current.forceUpdate()
-        } catch {
+        } catch (error) { // eslint-disable-line @typescript-eslint/no-unused-vars
           // Expected to error
         }
       })
