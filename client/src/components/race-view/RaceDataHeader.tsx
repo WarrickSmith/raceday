@@ -12,6 +12,10 @@ import type {
   Meeting,
   RaceNavigationData,
 } from '@/types/meetings'
+import { PollingHealth } from '@/components/polling/PollingStatus'
+import type { DataFreshness } from '@/utils/pollingCache'
+import type { CircuitBreakerState } from '@/utils/pollingErrorHandler'
+import type { ConnectionState } from '@/hooks/useUnifiedRaceRealtime'
 
 interface RaceDataHeaderProps {
   className?: string
@@ -32,9 +36,21 @@ interface RaceDataHeaderProps {
     isOverLimit?: boolean
     emergencyFallback?: boolean
   }
+  pollingInfo?: RacePollingHeaderInfo | null
   onConfigureAlerts?: () => void
   onToggleConnectionMonitor?: () => void
   showConnectionMonitor?: boolean
+}
+
+interface RacePollingHeaderInfo {
+  isActive: boolean
+  lastUpdate: Date | null
+  dataFreshness: DataFreshness
+  error: Error | null
+  circuitBreakerState: CircuitBreakerState
+  retryCount: number
+  connectionState: ConnectionState
+  totalUpdates: number
 }
 
 export const RaceDataHeader = memo(function RaceDataHeader({
@@ -44,6 +60,7 @@ export const RaceDataHeader = memo(function RaceDataHeader({
   meeting: propMeeting,
   navigationData: propNavigationData,
   connectionHealth,
+  pollingInfo,
   onConfigureAlerts,
   onToggleConnectionMonitor,
   showConnectionMonitor = false,
@@ -102,6 +119,76 @@ export const RaceDataHeader = memo(function RaceDataHeader({
     () => connectionHealth?.avgLatency || null,
     [connectionHealth]
   )
+  const pollingSummary = useMemo(() => {
+    if (!pollingInfo) {
+      return null
+    }
+
+    const lastUpdateLabel = pollingInfo.lastUpdate
+      ? pollingInfo.lastUpdate.toLocaleTimeString('en-NZ', {
+          hour12: false,
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        })
+      : 'Awaiting data'
+
+    let freshnessLabel = 'Fresh'
+    let freshnessClass = 'text-green-600'
+
+    switch (pollingInfo.dataFreshness) {
+      case 'fresh':
+        freshnessLabel = 'Fresh'
+        freshnessClass = 'text-green-600'
+        break
+      case 'acceptable':
+        freshnessLabel = 'Recent'
+        freshnessClass = 'text-yellow-600'
+        break
+      case 'stale':
+        freshnessLabel = 'Stale'
+        freshnessClass = 'text-orange-600'
+        break
+      case 'critical':
+        freshnessLabel = 'Critical'
+        freshnessClass = 'text-red-600'
+        break
+      default:
+        freshnessLabel = pollingInfo.dataFreshness
+        freshnessClass = 'text-gray-600'
+    }
+
+    let connectionLabel = 'Disconnected'
+    let connectionClass = 'text-red-600'
+
+    switch (pollingInfo.connectionState) {
+      case 'connected':
+        connectionLabel = 'Connected'
+        connectionClass = 'text-green-600'
+        break
+      case 'connecting':
+        connectionLabel = 'Connecting'
+        connectionClass = 'text-yellow-600'
+        break
+      case 'disconnecting':
+        connectionLabel = 'Pausing'
+        connectionClass = 'text-yellow-600'
+        break
+      case 'disconnected':
+      default:
+        connectionLabel = pollingInfo.retryCount > 0 ? 'Retrying' : 'Disconnected'
+        connectionClass = pollingInfo.retryCount > 0 ? 'text-yellow-600' : 'text-red-600'
+    }
+
+    return {
+      lastUpdateLabel,
+      freshnessLabel,
+      freshnessClass,
+      connectionLabel,
+      connectionClass,
+      totalUpdates: pollingInfo.totalUpdates,
+    }
+  }, [pollingInfo])
   const formattedRaceType = useMemo(() => {
     if (!meeting) return ''
 
@@ -179,12 +266,61 @@ export const RaceDataHeader = memo(function RaceDataHeader({
           </div>
         </div>
 
-        {/* Row 1, Col 4: Logo (centered) */}
+        {/* Row 1, Col 4: Polling status and logo */}
         <div className="flex items-center justify-center">
-          <div className="bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg px-2 py-1 text-center text-gray-500 font-bold text-xs">
-            LOGO Image
-            <br />
-            Placeholder
+          <div className="flex flex-col items-end gap-2 text-right">
+            {pollingInfo && pollingSummary && (
+              <>
+                <PollingHealth
+                  isActive={pollingInfo.isActive}
+                  lastUpdate={pollingInfo.lastUpdate}
+                  error={pollingInfo.error ?? undefined}
+                  circuitBreakerState={pollingInfo.circuitBreakerState}
+                  dataFreshness={pollingInfo.dataFreshness}
+                  retryCount={pollingInfo.retryCount}
+                  showNotifications={false}
+                  className="flex items-center justify-end gap-2"
+                />
+                <div className="text-[11px] uppercase tracking-wide text-gray-500">
+                  Last update:{' '}
+                  <span className="font-semibold text-gray-700">
+                    {pollingSummary.lastUpdateLabel}
+                  </span>
+                </div>
+                <div className="flex items-center space-x-2 text-[11px] uppercase tracking-wide text-gray-500">
+                  <span>
+                    Freshness:{' '}
+                    <span
+                      className={`font-semibold ${pollingSummary.freshnessClass}`}
+                    >
+                      {pollingSummary.freshnessLabel}
+                    </span>
+                  </span>
+                  <span className="text-gray-400">•</span>
+                  <span>
+                    Cycles:{' '}
+                    <span className="font-semibold text-gray-700">
+                      {pollingSummary.totalUpdates}
+                    </span>
+                  </span>
+                </div>
+                <div className="text-[11px] uppercase tracking-wide text-gray-500">
+                  Connection:{' '}
+                  <span
+                    className={`font-semibold ${pollingSummary.connectionClass}`}
+                  >
+                    {pollingSummary.connectionLabel}
+                  </span>
+                </div>
+              </>
+            )}
+            {!pollingInfo && (
+              <div className="bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg px-2 py-1 text-center text-gray-500 font-bold text-xs">
+                LOGO Image
+                <br />
+                Placeholder
+              </div>
+            )}
           </div>
         </div>
 
