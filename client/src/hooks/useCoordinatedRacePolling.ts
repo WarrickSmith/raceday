@@ -24,6 +24,16 @@ import { raceDataCache, type DataFreshness } from '@/utils/pollingCache'
 import type { Race, Entrant } from '@/types/meetings'
 import type { RacePoolData } from '@/types/racePools'
 
+const REQUEST_RATE_LIMIT_WINDOW_MS = 60_000
+const MAX_REQUESTS_PER_WINDOW = 24
+const CIRCUIT_BREAKER_THRESHOLD = 4
+const CIRCUIT_BREAKER_RESET_MS = 60_000
+const SLOW_RESPONSE_THRESHOLD_MS = 2_500
+const MAX_LATENCY_SAMPLES = 5
+const MAX_DEGRADE_MULTIPLIER = 2
+const MINIMUM_INTERVAL_MS = 5_000
+const JITTER_PERCENTAGE = 0.12
+
 // Core interface for race data sources as specified in Task 4
 export interface RaceDataSources {
   race: Race | null
@@ -46,6 +56,10 @@ export interface CoordinatedPollingConfig {
   raceStartTime: string
   raceStatus: string
   enabled: boolean
+  backgroundMultiplier?: number
+  isDocumentHidden?: boolean
+  inactiveSince?: number | null
+  inactivePauseDurationMs?: number
   onDataUpdate?: (data: RaceDataSources & { updateTrigger: number }) => void
   onError?: (error: Error, source?: string) => void
 }
@@ -130,6 +144,12 @@ export function useCoordinatedRacePolling(
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map())
   const mountedRef = useRef(true)
   const lastPollDataRef = useRef<RaceDataSources | null>(null)
+  const requestMetadataRef = useRef<Map<string, { etag?: string; lastModified?: string }>>(new Map())
+  const requestTimestampsRef = useRef<Map<string, number[]>>(new Map())
+  const circuitBreakerRef = useRef<Map<string, { open: boolean; openedAt: number | null }>>(new Map())
+  const inFlightRequestsRef = useRef<Map<string, Promise<unknown>>>(new Map())
+  const performanceMetricsRef = useRef<Map<string, { samples: number[]; average: number }>>(new Map())
+  const backgroundPauseRef = useRef(false)
 
   /**
    * Calculate polling interval based on race timing (2x backend frequency)
@@ -171,10 +191,23 @@ export function useCoordinatedRacePolling(
   /**
    * Get cached headers for conditional requests
    */
-  const getCachedHeaders = useCallback((): Record<string, string> => {
-    // TODO: Implement ETag support in cache system
-    return {}
-  }, [])
+  const getCachedHeaders = useCallback(
+    (source: string): Record<string, string> => {
+      const metadata = requestMetadataRef.current.get(`${source}:${config.raceId}`)
+      const headers: Record<string, string> = {}
+
+      if (metadata?.etag) {
+        headers['If-None-Match'] = metadata.etag
+      }
+
+      if (metadata?.lastModified) {
+        headers['If-Modified-Since'] = metadata.lastModified
+      }
+
+      return headers
+    },
+    [config.raceId]
+  )
 
   /**
    * Get cached data for a source
@@ -203,7 +236,8 @@ export function useCoordinatedRacePolling(
   const cacheResponseData = useCallback((
     source: string,
     raceId: string,
-    data: unknown
+    data: unknown,
+    metadata?: { etag?: string | null; lastModified?: string | null }
   ): void => {
     // Update race data cache based on source
     const currentCached = raceDataCache.getRaceData(raceId)
@@ -238,7 +272,43 @@ export function useCoordinatedRacePolling(
         break
     }
 
-    // TODO: Store ETag when cache system supports it
+    if (metadata?.etag || metadata?.lastModified) {
+      requestMetadataRef.current.set(`${source}:${raceId}`, {
+        etag: metadata?.etag ?? undefined,
+        lastModified: metadata?.lastModified ?? undefined
+      })
+    }
+  }, [])
+
+  const recordRequestTimestamp = useCallback((source: string, timestamp: number): void => {
+    const timestamps = requestTimestampsRef.current.get(source) ?? []
+    const recent = timestamps.filter(value => timestamp - value < REQUEST_RATE_LIMIT_WINDOW_MS)
+    recent.push(timestamp)
+    requestTimestampsRef.current.set(source, recent)
+  }, [])
+
+  const isRateLimited = useCallback((source: string, timestamp: number): boolean => {
+    const timestamps = requestTimestampsRef.current.get(source) ?? []
+    const recent = timestamps.filter(value => timestamp - value < REQUEST_RATE_LIMIT_WINDOW_MS)
+    requestTimestampsRef.current.set(source, recent)
+    return recent.length >= MAX_REQUESTS_PER_WINDOW
+  }, [])
+
+  const updatePerformanceMetrics = useCallback((source: string, durationMs: number): void => {
+    const metrics = performanceMetricsRef.current.get(source) ?? { samples: [], average: durationMs }
+    const samples = [...metrics.samples, durationMs].slice(-MAX_LATENCY_SAMPLES)
+    const average = samples.reduce((total, value) => total + value, 0) / samples.length
+    performanceMetricsRef.current.set(source, { samples, average })
+  }, [])
+
+  const getSlowestAverage = useCallback((): number => {
+    let slowest = 0
+    performanceMetricsRef.current.forEach(value => {
+      if (value.average > slowest) {
+        slowest = value.average
+      }
+    })
+    return slowest
   }, [])
 
   /**
@@ -251,164 +321,229 @@ export function useCoordinatedRacePolling(
   ): Promise<unknown> => {
     const { raceId } = config
 
-    // Check if request is already in flight
-    if (coordinationState.requestsInFlight.has(source)) {
-      logger.debug(`Request for ${source} already in flight, skipping`)
-      return null
+    const existingRequest = inFlightRequestsRef.current.get(source)
+    if (existingRequest) {
+      logger.debug(`Joining in-flight request for ${source}`)
+      return existingRequest
     }
 
-    // Mark request as in flight
-    setCoordinationState(prev => ({
-      ...prev,
-      requestsInFlight: new Set([...prev.requestsInFlight, source])
-    }))
+    const now = Date.now()
+    const circuitState = circuitBreakerRef.current.get(source)
 
-    try {
-      // Apply staggered delay
-      if (delay > 0) {
-        await new Promise(resolve => setTimeout(resolve, delay))
+    if (circuitState?.open) {
+      if (circuitState.openedAt && now - circuitState.openedAt > CIRCUIT_BREAKER_RESET_MS) {
+        circuitBreakerRef.current.set(source, { open: false, openedAt: null })
+      } else {
+        logger.warn(`${source} circuit breaker open, serving cached data`, { raceId })
+        setDataFreshness('acceptable')
+        return getCachedData(source, raceId)
       }
+    }
 
-      // Create abort controller for this request
-      const abortController = new AbortController()
-      abortControllersRef.current.set(source, abortController)
+    if (isRateLimited(source, now)) {
+      logger.warn(`${source} request throttled by client limiter`, {
+        raceId,
+        windowMs: REQUEST_RATE_LIMIT_WINDOW_MS,
+        maxRequests: MAX_REQUESTS_PER_WINDOW
+      })
+      setDataFreshness('acceptable')
+      return getCachedData(source, raceId)
+    }
 
-      // Build URL with required parameters for money-flow endpoint
-      let requestUrl = `/api/race/${raceId}${endpoint}`
+    const performRequest = async (): Promise<unknown> => {
+      setCoordinationState(prev => ({
+        ...prev,
+        requestsInFlight: new Set([...prev.requestsInFlight, source])
+      }))
 
-      // Money flow endpoint requires entrants parameter
-      if (source === 'money-flow' && endpoint.includes('money-flow-timeline')) {
-        // Get current entrants from data or cache
-        const currentEntrants = data.entrants?.length > 0
-          ? data.entrants
-          : raceDataCache.getRaceData(raceId)?.entrants || []
+      try {
+        if (delay > 0) {
+          await new Promise(resolve => setTimeout(resolve, delay))
+        }
 
-        if (currentEntrants.length > 0) {
-          const entrantIds = currentEntrants.map(e => e.entrantId || e.$id).filter(Boolean)
-          if (entrantIds.length > 0) {
-            const entrantsParam = entrantIds.join(',')
-            requestUrl += `?entrants=${encodeURIComponent(entrantsParam)}`
-            logger.debug(`${source} request with ${entrantIds.length} entrants`)
-          } else {
+        let requestUrl = `/api/race/${raceId}${endpoint}`
+
+        if (source === 'money-flow' && endpoint.includes('money-flow-timeline')) {
+          const currentEntrants = data.entrants?.length > 0
+            ? data.entrants
+            : raceDataCache.getRaceData(raceId)?.entrants || []
+
+          if (currentEntrants.length === 0) {
+            logger.warn(`${source} request skipped - no entrants available`)
+            return null
+          }
+
+          const entrantIds = currentEntrants.map(entrant => entrant.entrantId || entrant.$id).filter(Boolean)
+          if (entrantIds.length === 0) {
             logger.warn(`${source} request skipped - no valid entrant IDs found`)
             return null
           }
-        } else {
-          logger.warn(`${source} request skipped - no entrants available`)
+
+          const entrantsParam = entrantIds.join(',')
+          requestUrl += `?entrants=${encodeURIComponent(entrantsParam)}`
+          logger.debug(`${source} request with ${entrantIds.length} entrants`)
+        }
+
+        const abortController = new AbortController()
+        abortControllersRef.current.set(source, abortController)
+
+        const headers = {
+          'Cache-Control': 'no-cache',
+          ...getCachedHeaders(source)
+        }
+
+        recordRequestTimestamp(source, Date.now())
+
+        const start = typeof performance !== 'undefined' ? performance.now() : Date.now()
+        const response = await fetch(requestUrl, {
+          signal: abortController.signal,
+          cache: 'no-cache',
+          headers
+        })
+        const end = typeof performance !== 'undefined' ? performance.now() : Date.now()
+        updatePerformanceMetrics(source, end - start)
+
+        if (!response.ok) {
+          throw new Error(`${source} fetch failed: ${response.statusText}`)
+        }
+
+        const etag = response.headers.get('ETag')
+        const lastModified = response.headers.get('Last-Modified')
+
+        if (response.status === 304) {
+          logger.debug(`${source} data not modified, using cached version`)
+          const cached = getCachedData(source, raceId)
+          if (cached) {
+            cacheResponseData(source, raceId, cached, { etag, lastModified })
+          }
+
+          setCoordinationState(prev => ({
+            ...prev,
+            successfulSources: new Set([...prev.successfulSources, source]),
+            failedSources: new Set([...prev.failedSources].filter(s => s !== source))
+          }))
+
+          setErrorState(prev => ({
+            ...prev,
+            [source]: {
+              lastError: null,
+              errorCount: 0,
+              lastSuccessTime: new Date(),
+              canUseFallback: true
+            }
+          }))
+
+          circuitBreakerRef.current.set(source, { open: false, openedAt: null })
+          setDataFreshness('fresh')
+          return cached
+        }
+
+        const responseData = await response.json()
+
+        cacheResponseData(source, raceId, responseData, { etag, lastModified })
+
+        setCoordinationState(prev => ({
+          ...prev,
+          successfulSources: new Set([...prev.successfulSources, source]),
+          failedSources: new Set([...prev.failedSources].filter(s => s !== source))
+        }))
+
+        setErrorState(prev => ({
+          ...prev,
+          [source]: {
+            lastError: null,
+            errorCount: 0,
+            lastSuccessTime: new Date(),
+            canUseFallback: true
+          }
+        }))
+
+        circuitBreakerRef.current.set(source, { open: false, openedAt: null })
+        return responseData
+      } catch (error) {
+        const fetchError = error instanceof Error ? error : new Error(`Unknown error in ${source}`)
+        const isAbortError = fetchError.name === 'AbortError' || fetchError.message.includes('aborted')
+        const isIntentionalAbort = abortControllersRef.current.has(source) && isAbortError
+
+        if (isIntentionalAbort) {
+          logger.debug(`${source} request intentionally aborted during cleanup`)
           return null
         }
-      }
 
-      // Fetch with caching headers for optimization
-      const response = await fetch(requestUrl, {
-        signal: abortController.signal,
-        cache: 'no-cache',
-        headers: {
-          'Cache-Control': 'no-cache',
-          // Add conditional request headers if we have cached data
-          ...getCachedHeaders()
-        }
-      })
+        setCoordinationState(prev => ({
+          ...prev,
+          failedSources: new Set([...prev.failedSources, source]),
+          successfulSources: new Set([...prev.successfulSources].filter(s => s !== source))
+        }))
 
-      if (!response.ok) {
-        throw new Error(`${source} fetch failed: ${response.statusText}`)
-      }
+        setErrorState(prev => {
+          const previous = prev[source]
+          const nextErrorCount = (previous?.errorCount ?? 0) + 1
 
-      // Check if response is 304 Not Modified
-      if (response.status === 304) {
-        logger.debug(`${source} data not modified, using cached version`)
-        return getCachedData(source, raceId)
-      }
+          if (nextErrorCount >= CIRCUIT_BREAKER_THRESHOLD) {
+            circuitBreakerRef.current.set(source, { open: true, openedAt: Date.now() })
+            logger.warn(`${source} circuit breaker opened`, { raceId, errorCount: nextErrorCount })
+          }
 
-      const responseData = await response.json()
-
-      // Cache successful response
-      cacheResponseData(source, raceId, responseData)
-
-      // Update success tracking
-      setCoordinationState(prev => ({
-        ...prev,
-        successfulSources: new Set([...prev.successfulSources, source]),
-        failedSources: new Set([...prev.failedSources].filter(s => s !== source))
-      }))
-
-      // Clear error state for this source
-      setErrorState(prev => ({
-        ...prev,
-        [source]: {
-          lastError: null,
-          errorCount: 0,
-          lastSuccessTime: new Date(),
-          canUseFallback: true
-        }
-      }))
-
-      return responseData
-
-    } catch (error) {
-      const fetchError = error instanceof Error ? error : new Error(`Unknown error in ${source}`)
-
-      // Classify error types to handle abort signals appropriately
-      const isAbortError = fetchError.name === 'AbortError' || fetchError.message.includes('aborted')
-      const isIntentionalAbort = abortControllersRef.current.has(source) && isAbortError
-
-      // Don't log or track intentional aborts as errors
-      if (isIntentionalAbort) {
-        logger.debug(`${source} request intentionally aborted during cleanup`)
-        return null
-      }
-
-      // Update error tracking for genuine errors
-      setCoordinationState(prev => ({
-        ...prev,
-        failedSources: new Set([...prev.failedSources, source]),
-        successfulSources: new Set([...prev.successfulSources].filter(s => s !== source))
-      }))
-
-      // Update error state with enhanced classification
-      setErrorState(prev => ({
-        ...prev,
-        [source]: {
-          lastError: fetchError,
-          errorCount: (prev[source]?.errorCount || 0) + 1,
-          lastSuccessTime: prev[source]?.lastSuccessTime || null,
-          canUseFallback: raceDataCache.canUseFallback(`${source}:${raceId}`)
-        }
-      }))
-
-      // Enhanced error logging with context
-      if (isAbortError) {
-        logger.warn(`${source} fetch aborted unexpectedly`, {
-          error: fetchError.message,
-          hasAbortController: abortControllersRef.current.has(source)
+          return {
+            ...prev,
+            [source]: {
+              lastError: fetchError,
+              errorCount: nextErrorCount,
+              lastSuccessTime: previous?.lastSuccessTime ?? null,
+              canUseFallback: raceDataCache.canUseFallback(`race:${raceId}`)
+            }
+          }
         })
-      } else {
-        logger.error(`${source} fetch failed`, { error: fetchError.message })
-      }
 
-      // Try to use fallback data for non-abort errors
-      if (!isAbortError) {
-        const fallbackData = getCachedData(source, raceId)
-        if (fallbackData) {
-          logger.debug(`Using fallback data for ${source}`)
-          setDataFreshness('stale')
-          return fallbackData
+        if (isAbortError) {
+          logger.warn(`${source} fetch aborted unexpectedly`, {
+            error: fetchError.message,
+            hasAbortController: abortControllersRef.current.has(source)
+          })
+        } else {
+          logger.error(`${source} fetch failed`, { error: fetchError.message })
         }
+
+        if (!isAbortError) {
+          const fallbackData = getCachedData(source, raceId)
+          if (fallbackData) {
+            logger.debug(`Using fallback data for ${source}`)
+            setDataFreshness('stale')
+            return fallbackData
+          }
+        }
+
+        throw fetchError
+      } finally {
+        setCoordinationState(prev => ({
+          ...prev,
+          requestsInFlight: new Set([...prev.requestsInFlight].filter(s => s !== source))
+        }))
+
+        abortControllersRef.current.delete(source)
       }
-
-      throw fetchError
-
-    } finally {
-      // Clear request tracking
-      setCoordinationState(prev => ({
-        ...prev,
-        requestsInFlight: new Set([...prev.requestsInFlight].filter(s => s !== source))
-      }))
-
-      // Clean up abort controller
-      abortControllersRef.current.delete(source)
     }
-  }, [config, coordinationState.requestsInFlight, data.entrants, getCachedData, cacheResponseData, getCachedHeaders, logger])
+
+    const requestPromise = performRequest()
+    inFlightRequestsRef.current.set(source, requestPromise)
+
+    try {
+      return await requestPromise
+    } finally {
+      inFlightRequestsRef.current.delete(source)
+    }
+  }, [
+    cacheResponseData,
+    config,
+    data.entrants,
+    getCachedData,
+    getCachedHeaders,
+    isRateLimited,
+    logger,
+    recordRequestTimestamp,
+    updatePerformanceMetrics
+  ])
 
   /**
    * Execute coordinated polling cycle for all data sources
@@ -561,16 +696,18 @@ export function useCoordinatedRacePolling(
    * Schedule next polling cycle
    */
   const scheduleNextPoll = useCallback(() => {
-    if (!mountedRef.current || coordinationState.isPaused || !config.enabled) {
+    if (!mountedRef.current || !config.enabled) {
       return
     }
 
-    // Calculate current polling interval
-    const timeToStart = calculateTimeToStart(config.raceStartTime)
-    const interval = calculatePollingInterval(timeToStart, config.raceStatus)
+    if (coordinationState.isPaused && !backgroundPauseRef.current) {
+      return
+    }
 
-    // Stop polling if interval is 0 (race is final)
-    if (interval === 0) {
+    const timeToStart = calculateTimeToStart(config.raceStartTime)
+    const baseInterval = calculatePollingInterval(timeToStart, config.raceStatus)
+
+    if (baseInterval === 0) {
       logger.info('Race is final, stopping coordinated polling', {
         raceId: config.raceId,
         raceStatus: config.raceStatus
@@ -583,39 +720,89 @@ export function useCoordinatedRacePolling(
       return
     }
 
-    // Update state with new interval
+    if (config.isDocumentHidden && config.inactiveSince && config.inactivePauseDurationMs) {
+      const inactiveDuration = Date.now() - config.inactiveSince
+      if (inactiveDuration >= config.inactivePauseDurationMs) {
+        if (!backgroundPauseRef.current) {
+          backgroundPauseRef.current = true
+          logger.info('Background inactivity threshold reached, pausing coordinated polling', {
+            raceId: config.raceId,
+            inactiveDuration
+          })
+          setCoordinationState(prev => ({
+            ...prev,
+            isPaused: true
+          }))
+        }
+        return
+      }
+    } else if (backgroundPauseRef.current) {
+      backgroundPauseRef.current = false
+      if (coordinationState.isPaused) {
+        setCoordinationState(prev => ({
+          ...prev,
+          isPaused: false
+        }))
+      }
+    }
+
+    const backgroundMultiplier = config.backgroundMultiplier && config.backgroundMultiplier > 1
+      ? config.backgroundMultiplier
+      : 1
+
+    const slowestAverage = getSlowestAverage()
+    let adjustedInterval = baseInterval * backgroundMultiplier
+    adjustedInterval = Math.min(adjustedInterval, baseInterval * MAX_DEGRADE_MULTIPLIER)
+
+    if (slowestAverage > SLOW_RESPONSE_THRESHOLD_MS) {
+      const slowMultiplier = Math.min(
+        MAX_DEGRADE_MULTIPLIER,
+        1 + (slowestAverage - SLOW_RESPONSE_THRESHOLD_MS) / SLOW_RESPONSE_THRESHOLD_MS
+      )
+      adjustedInterval = Math.min(adjustedInterval * slowMultiplier, baseInterval * MAX_DEGRADE_MULTIPLIER)
+    }
+
+    adjustedInterval = Math.max(adjustedInterval, MINIMUM_INTERVAL_MS)
+
+    const jitterRange = adjustedInterval * JITTER_PERCENTAGE
+    const jitterOffset = jitterRange > 0 ? (Math.random() * jitterRange * 2) - jitterRange : 0
+    const intervalWithJitter = Math.max(MINIMUM_INTERVAL_MS, Math.round(adjustedInterval + jitterOffset))
+
     setCoordinationState(prev => ({
       ...prev,
-      currentInterval: interval
+      currentInterval: intervalWithJitter
     }))
 
-    // Clear existing timeout
     if (pollTimeoutRef.current) {
       clearTimeout(pollTimeoutRef.current)
     }
 
-    // Schedule next poll
     pollTimeoutRef.current = setTimeout(() => {
-      if (mountedRef.current) {
+      if (mountedRef.current && !backgroundPauseRef.current) {
         executeCoordinatedPoll().then(() => {
           if (mountedRef.current) {
             scheduleNextPoll()
           }
         })
       }
-    }, interval)
+    }, intervalWithJitter)
 
     logger.debug('Next coordinated poll scheduled', {
       raceId: config.raceId,
-      interval,
+      interval: intervalWithJitter,
+      baseInterval,
+      backgroundMultiplier,
+      jitter: Math.round(jitterOffset),
+      slowestAverage,
       timeToStart: Math.round(timeToStart * 100) / 100
     })
   }, [
-    config,
-    coordinationState,
-    calculateTimeToStart,
     calculatePollingInterval,
+    calculateTimeToStart,
+    config,
+    coordinationState.isPaused,
     executeCoordinatedPoll,
+    getSlowestAverage,
     logger
   ])
 

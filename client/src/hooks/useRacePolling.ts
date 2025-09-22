@@ -25,6 +25,14 @@ import { useCoordinatedRacePolling } from './useCoordinatedRacePolling'
 import type { Race, Entrant } from '@/types/meetings'
 import type { RacePoolData } from '@/types/racePools'
 
+const parsedBackgroundMultiplier = Number.parseFloat(
+  process.env.NEXT_PUBLIC_BACKGROUND_POLLING_MULTIPLIER ?? '2'
+)
+const BACKGROUND_POLLING_MULTIPLIER = Number.isFinite(parsedBackgroundMultiplier) && parsedBackgroundMultiplier > 1
+  ? parsedBackgroundMultiplier
+  : 2
+const INACTIVE_PAUSE_THRESHOLD_MS = 5 * 60 * 1000
+
 // Polling configuration interface as specified in Task 1
 interface PollingConfig {
   raceId: string
@@ -88,7 +96,14 @@ export function useRacePolling(config: PollingConfig): UseRacePollingResult {
   const logger = useLogger('useRacePolling')
 
   // Background optimization state (UI-specific)
-  const [backgroundOptimization, setBackgroundOptimization] = useState(false)
+  const [backgroundOptimization, setBackgroundOptimization] = useState(
+    () => (typeof document !== 'undefined' ? document.hidden : false)
+  )
+  const [backgroundSince, setBackgroundSince] = useState<number | null>(() =>
+    typeof document !== 'undefined' && document.hidden ? Date.now() : null
+  )
+  const inactivityTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const backgroundPauseRef = useRef(false)
 
   // Use coordinated polling for data fetching (Task 4)
   const coordinatedPolling = useCoordinatedRacePolling({
@@ -96,6 +111,10 @@ export function useRacePolling(config: PollingConfig): UseRacePollingResult {
     raceStartTime: config.raceStartTime,
     raceStatus: config.raceStatus,
     enabled: true,
+    backgroundMultiplier: backgroundOptimization ? BACKGROUND_POLLING_MULTIPLIER : 1,
+    isDocumentHidden: backgroundOptimization,
+    inactiveSince: backgroundSince,
+    inactivePauseDurationMs: INACTIVE_PAUSE_THRESHOLD_MS,
     onDataUpdate: (data) => {
       // Convert coordinated data to legacy format
       const legacyData: RaceData = {
@@ -109,30 +128,38 @@ export function useRacePolling(config: PollingConfig): UseRacePollingResult {
     onError: config.onError
   })
 
+  const {
+    coordinationState: coordinatorState,
+    errorState: coordinatorErrorState,
+    dataFreshness,
+    pausePolling: pauseCoordinatedPolling,
+    resumePolling: resumeCoordinatedPolling
+  } = coordinatedPolling
+
   // Convert coordinated polling state to legacy format
   const pollingState: PollingState = {
-    isActive: coordinatedPolling.coordinationState.isActive,
-    isPaused: coordinatedPolling.coordinationState.isPaused,
-    isStopped: coordinatedPolling.coordinationState.isStopped,
-    currentInterval: coordinatedPolling.coordinationState.currentInterval,
-    nextPollTime: coordinatedPolling.coordinationState.lastPollTime
-      ? coordinatedPolling.coordinationState.lastPollTime.getTime() + coordinatedPolling.coordinationState.currentInterval
+    isActive: coordinatorState.isActive,
+    isPaused: coordinatorState.isPaused,
+    isStopped: coordinatorState.isStopped,
+    currentInterval: coordinatorState.currentInterval,
+    nextPollTime: coordinatorState.lastPollTime
+      ? coordinatorState.lastPollTime.getTime() + coordinatorState.currentInterval
       : null,
-    consecutiveErrors: coordinatedPolling.coordinationState.failedSources.size,
-    lastSuccessfulPoll: coordinatedPolling.coordinationState.lastPollTime,
-    totalPolls: coordinatedPolling.coordinationState.totalPolls,
+    consecutiveErrors: coordinatorState.failedSources.size,
+    lastSuccessfulPoll: coordinatorState.lastPollTime,
+    totalPolls: coordinatorState.totalPolls,
     backgroundOptimization: backgroundOptimization,
   }
 
   // Convert coordinator error state to legacy format
   const errorState: ErrorState = {
-    lastError: Object.values(coordinatedPolling.errorState)[0]?.lastError || null,
+    lastError: Object.values(coordinatorErrorState)[0]?.lastError || null,
     errorClassification: null, // Simplified for legacy compatibility
-    retryAttempt: Math.max(...Object.values(coordinatedPolling.errorState).map(s => s.errorCount), 0),
-    circuitBreakerOpen: coordinatedPolling.coordinationState.failedSources.size > 3,
+    retryAttempt: Math.max(...Object.values(coordinatorErrorState).map(s => s.errorCount), 0),
+    circuitBreakerOpen: coordinatorState.failedSources.size > 3,
     backoffDelay: 1000,
-    canUseFallback: Object.values(coordinatedPolling.errorState).some(s => s.canUseFallback),
-    dataFreshness: coordinatedPolling.dataFreshness,
+    canUseFallback: Object.values(coordinatorErrorState).some(s => s.canUseFallback),
+    dataFreshness,
   }
 
   // Delegate polling control to coordinator
@@ -173,25 +200,62 @@ export function useRacePolling(config: PollingConfig): UseRacePollingResult {
 
   // Background tab detection for battery optimization
   useEffect(() => {
+    const pauseForInactivity = () => {
+      if (!backgroundPauseRef.current) {
+        backgroundPauseRef.current = true
+        logger.info('Pausing polling after prolonged background inactivity')
+        if (coordinatorState.isActive) {
+          pauseCoordinatedPolling()
+        }
+      }
+    }
+
     const handleVisibilityChange = () => {
       const isBackground = document.hidden
       setBackgroundOptimization(isBackground)
 
       if (isBackground) {
+        setBackgroundSince(previous => (previous ?? Date.now()))
+        if (inactivityTimeoutRef.current) {
+          clearTimeout(inactivityTimeoutRef.current)
+        }
+        inactivityTimeoutRef.current = setTimeout(pauseForInactivity, INACTIVE_PAUSE_THRESHOLD_MS)
         logger.debug('Tab backgrounded, applying battery-conscious optimization')
-        // Coordinator handles the actual polling frequency changes
       } else {
+        setBackgroundSince(null)
+        if (inactivityTimeoutRef.current) {
+          clearTimeout(inactivityTimeoutRef.current)
+          inactivityTimeoutRef.current = null
+        }
+
+        if (backgroundPauseRef.current) {
+          backgroundPauseRef.current = false
+          if (coordinatorState.isActive && coordinatorState.isPaused) {
+            resumeCoordinatedPolling()
+          }
+        }
+
         logger.debug('Tab foregrounded, resuming normal polling')
-        // Coordinator handles the actual polling frequency changes
       }
     }
 
+    handleVisibilityChange()
     document.addEventListener('visibilitychange', handleVisibilityChange)
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
+      if (inactivityTimeoutRef.current) {
+        clearTimeout(inactivityTimeoutRef.current)
+        inactivityTimeoutRef.current = null
+      }
     }
-  }, [logger])
+  }, [
+    coordinatorState.isActive,
+    coordinatorState.isPaused,
+    pauseCoordinatedPolling,
+    resumeCoordinatedPolling,
+    logger
+  ])
 
   // Auto-start polling if initial data is available
   const hasStartedRef = useRef(false)
@@ -213,8 +277,8 @@ export function useRacePolling(config: PollingConfig): UseRacePollingResult {
    * Get current data freshness level (Task 3) - delegated to coordinator
    */
   const getDataFreshness = useCallback((): DataFreshness => {
-    return coordinatedPolling.dataFreshness
-  }, [coordinatedPolling.dataFreshness])
+    return dataFreshness
+  }, [dataFreshness])
 
   return {
     pollingState,
