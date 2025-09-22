@@ -192,7 +192,7 @@ export function PollingStatus({
  * Error notification component with auto-dismiss
  */
 export function ErrorNotification({
-  error,
+  error, // eslint-disable-line @typescript-eslint/no-unused-vars
   classification,
   retryCount,
   isRecovering,
