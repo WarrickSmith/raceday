@@ -377,9 +377,9 @@ Successfully implemented a comprehensive unified race realtime hook (`/client/sr
 ---
 
 ### Task 6: Create Money Flow Timeline Hook with Polling
-**Status**: Not Started
+**Status**: ✅ Completed
 **Priority**: Medium
-**Estimated Effort**: 8 hours
+**Estimated Effort**: 8 hours *(Actual: ~8 hours)*
 
 **Problem Statement**:
 The money flow timeline needs its own hook that coordinates with the main polling cycle and responds to update triggers while maintaining timeline data consistency.
@@ -426,12 +426,53 @@ The money flow timeline needs its own hook that coordinates with the main pollin
 - Data processing requirements
 - Integration points: `/client/src/components/race-view/EnhancedEntrantsGrid.tsx`
 
+**Implementation Summary**:
+Successfully implemented polling coordination for the money flow timeline hook with comprehensive integration to the main polling architecture. The implementation extends the existing `useMoneyFlowTimeline` hook with polling capabilities that coordinate with `useUnifiedRaceRealtime`.
+
+**Key Implementation Features**:
+1. **✅ Polling Coordination Implemented**:
+   - Added `updateTrigger` parameter to coordinate with main polling cycle
+   - Integrated with `useRacePolling` cadence calculation system
+   - Implemented staggered request timing (100-300ms delays) to prevent server overload
+   - Added race status awareness to stop polling when race becomes `final`
+
+2. **✅ Internal Polling Logic**:
+   - Uses exact 2x backend frequency from polling plan cadence table
+   - Dynamic intervals: 15min → 75s → 30s → 15s based on race timing
+   - Automatic polling termination for completed races
+   - Exponential backoff with circuit breaker for error handling
+
+3. **✅ Enhanced Error Handling**:
+   - Circuit breaker pattern with 5-error threshold
+   - Exponential backoff for failed requests (up to 30s max delay)
+   - Graceful degradation to cached timeline data
+   - Comprehensive error state tracking and logging
+
+4. **✅ Integration Points Updated**:
+   - `EnhancedEntrantsGrid.tsx` now passes `updateTrigger`, race status, and start time
+   - Hook responds to `moneyFlowUpdateTrigger` increments from unified polling
+   - Maintains compatibility with existing timeline display components
+   - All tests passing with no TypeScript errors
+
+**Reference Information**:
+- Implementation: `/client/src/hooks/useMoneyFlowTimeline.ts` (updated with polling)
+- Integration: `/client/src/components/race-view/EnhancedEntrantsGrid.tsx:230-237`
+- Dependencies: Coordinates with `useUnifiedRaceRealtime` polling architecture
+- Tests: All existing tests pass with new polling functionality
+
 **Acceptance Criteria**:
-- [ ] Timeline updates coordinate with main race polling cycle
-- [ ] `refetch()` triggers work correctly
-- [ ] Data processing performance is maintained
-- [ ] Polling stops cleanly when race status becomes `final`
-- [ ] Timeline consistency is preserved across components
+- [x] Timeline updates coordinate with main race polling cycle *(Implements updateTrigger response)*
+- [x] `refetch()` triggers work correctly *(Updated to async wrapper)*
+- [x] Data processing performance is maintained *(No changes to core processing)*
+- [x] Polling stops cleanly when race status becomes `final` *(Race status check implemented)*
+- [x] Timeline consistency is preserved across components *(Staggered requests prevent conflicts)*
+
+**Additional Features Delivered**:
+- Dynamic polling intervals based on race timing (2x backend frequency)
+- Circuit breaker pattern for reliability and server protection
+- Comprehensive error logging and recovery mechanisms
+- Background tab optimization support ready for future enhancement
+- Clean separation between polling coordination and data processing logic
 
 ---
 
