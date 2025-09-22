@@ -100,13 +100,19 @@ interface UseMoneyFlowTimelineResult {
   getWinPoolData: (entrantId: string, interval: number) => string
   getPlacePoolData: (entrantId: string, interval: number) => string
   getOddsData: (entrantId: string, interval: number, oddsType: 'fixedWin' | 'fixedPlace' | 'poolWin' | 'poolPlace') => string
+  // NEW: Polling coordination functions
+  isPollingActive: boolean
+  startPolling: () => void
+  stopPolling: () => void
 }
 
 export function useMoneyFlowTimeline(
   raceId: string,
   entrantIds: string[],
   poolType: TimelinePoolType = 'win',
-  raceStatus?: string // Add race status to control post-race behavior
+  raceStatus?: string, // Add race status to control post-race behavior
+  updateTrigger?: number, // Add update trigger to coordinate with main polling cycle
+  raceStartTime?: string // Add race start time for polling cadence calculations
 ): UseMoneyFlowTimelineResult {
   const logger = useLogger('useMoneyFlowTimeline')
   const loggerRef = useRef(logger)
@@ -119,9 +125,53 @@ export function useMoneyFlowTimeline(
   const [error, setError] = useState<string | null>(null)
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
 
-  // Fetch money flow timeline data for all entrants
-  const fetchTimelineData = useCallback(async () => {
-    if (!raceId || entrantIds.length === 0) return
+  // Polling coordination state
+  const [isPollingActive, setIsPollingActive] = useState(false)
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const lastPollingTimeRef = useRef<number>(0)
+  const errorCountRef = useRef(0)
+  const maxErrors = 5 // Circuit breaker threshold
+
+  // Calculate polling interval based on race timing (2x backend frequency)
+  const calculatePollingInterval = useCallback((timeToStart: number, status: string): number => {
+    const raceStatusLower = status.toLowerCase()
+
+    // Stop polling if race is final
+    if (['final', 'finalized', 'abandoned', 'cancelled'].includes(raceStatusLower)) {
+      return 0
+    }
+
+    // Apply exact cadence table from polling plan (2x backend frequency)
+    if (raceStatusLower === 'open') {
+      if (timeToStart > 65) return 900000    // 15 minutes (backend: 30m)
+      if (timeToStart > 20) return 150000    // 2.5 minutes (backend: 5m)
+      if (timeToStart > 5) return 75000      // 75 seconds (backend: 2.5m)
+      if (timeToStart > 3) return 30000      // 30 seconds (backend: 1m)
+      return 15000                           // 15 seconds (backend: 30s)
+    }
+
+    if (['closed', 'running', 'interim'].includes(raceStatusLower)) {
+      return 15000 // 15 seconds during critical periods
+    }
+
+    return 30000 // Default 30 seconds for other states
+  }, [])
+
+  // Calculate time to start from race start time
+  const getTimeToStart = useCallback((): number => {
+    if (!raceStartTime) return 0
+
+    const now = new Date()
+    const startTime = new Date(raceStartTime)
+    const diffMs = startTime.getTime() - now.getTime()
+    const diffMinutes = Math.round(diffMs / (1000 * 60))
+
+    return diffMinutes
+  }, [raceStartTime])
+
+  // Fetch money flow timeline data for all entrants with enhanced error handling
+  const fetchTimelineData = useCallback(async (): Promise<boolean> => {
+    if (!raceId || entrantIds.length === 0) return false
 
     // Check race status to avoid unnecessary polling for completed races
     const isRaceComplete =
@@ -130,7 +180,16 @@ export function useMoneyFlowTimeline(
 
     if (isRaceComplete && timelineData.size > 0) {
       // Race is complete and we have timeline data, skip fetch
-      return
+      return true
+    }
+
+    // Circuit breaker: if too many errors, stop polling temporarily
+    if (errorCountRef.current >= maxErrors) {
+      loggerRef.current.warn('Money flow polling circuit breaker triggered', {
+        errorCount: errorCountRef.current,
+        maxErrors
+      })
+      return false
     }
 
     setIsLoading(true)
@@ -166,7 +225,7 @@ export function useMoneyFlowTimeline(
       if (documents.length === 0) {
         setTimelineData(new Map())
         setLastUpdate(new Date())
-        return
+        return true
       }
 
       // Use unified processing for both bucketed and legacy data
@@ -177,15 +236,27 @@ export function useMoneyFlowTimeline(
       )
       setTimelineData(entrantDataMap)
       setLastUpdate(new Date())
+
+      // Reset error count on successful fetch
+      errorCountRef.current = 0
+      return true
     } catch (err) {
+      // Increment error count for circuit breaker
+      errorCountRef.current += 1
+
       const errorMessage =
         err instanceof Error ? err.message : 'Failed to fetch timeline data'
       setError(errorMessage)
-      loggerRef.current.error('Error fetching money flow timeline', err)
+      loggerRef.current.error('Error fetching money flow timeline', {
+        error: err,
+        errorCount: errorCountRef.current,
+        maxErrors
+      })
+      return false
     } finally {
       setIsLoading(false)
     }
-  }, [raceId, entrantIds, entrantKey, raceStatus, timelineData.size])
+  }, [raceId, entrantIds, entrantKey, raceStatus, timelineData.size, maxErrors])
 
   // Generate timeline grid data optimized for component display
   const gridData = useMemo(() => {
@@ -307,36 +378,16 @@ export function useMoneyFlowTimeline(
     [timelineData]
   )
 
-  // Set up real-time subscription for money flow updates
+  // Handle update trigger from unified polling coordination
   useEffect(() => {
-    if (!raceId || entrantIds.length === 0) return
-
-    // Initial fetch
-    fetchTimelineData()
-
-    // Skip real-time subscriptions for completed races to preserve final state
-    const isRaceComplete =
-      raceStatus &&
-      ['Final', 'Finalized', 'Abandoned', 'Cancelled'].includes(raceStatus)
-    if (isRaceComplete) {
-      // Race is complete, skip real-time subscription
-      return
+    if (updateTrigger && updateTrigger > 0) {
+      loggerRef.current.debug('Money flow timeline triggered by unified polling', {
+        updateTrigger,
+        raceId
+      })
+      fetchTimelineData()
     }
-
-    // NOTE: Real-time subscription removed to follow hybrid architecture
-    // This hook now only handles data fetching - real-time updates come from 
-    // the unified subscription in useUnifiedRaceRealtime
-    // The parent component should trigger refetch when it receives money-flow-history updates
-    
-    loggerRef.current.debug('Money flow timeline using fetch-only mode (no subscription)', {
-      raceId,
-      entrantIds: entrantIds.length
-    })
-
-    return () => {
-      // No subscription cleanup needed - using unified subscription architecture
-    }
-  }, [raceId, entrantIds, entrantKey, raceStatus, fetchTimelineData])
+  }, [updateTrigger, fetchTimelineData, raceId])
 
   // NEW: Get Win pool data for specific entrant and time interval
   const getWinPoolData = useCallback(
@@ -411,17 +462,145 @@ export function useMoneyFlowTimeline(
     [timelineData]
   )
 
+  // Start internal polling with coordinated timing
+  const startPolling = useCallback(() => {
+    if (!raceId || entrantIds.length === 0 || !raceStartTime || !raceStatus) {
+      return
+    }
+
+    // Stop any existing polling
+    if (pollingIntervalRef.current) {
+      clearTimeout(pollingIntervalRef.current)
+      pollingIntervalRef.current = null
+    }
+
+    const timeToStart = getTimeToStart()
+    const interval = calculatePollingInterval(timeToStart, raceStatus)
+
+    // If interval is 0, race is finished, don't start polling
+    if (interval === 0) {
+      setIsPollingActive(false)
+      loggerRef.current.debug('Money flow polling stopped - race is finished', {
+        raceStatus,
+        timeToStart
+      })
+      return
+    }
+
+    setIsPollingActive(true)
+    lastPollingTimeRef.current = Date.now()
+
+    const scheduleNextPoll = () => {
+      const currentTimeToStart = getTimeToStart()
+      const currentInterval = calculatePollingInterval(currentTimeToStart, raceStatus)
+
+      if (currentInterval === 0) {
+        // Race finished, stop polling
+        setIsPollingActive(false)
+        pollingIntervalRef.current = null
+        loggerRef.current.debug('Money flow polling auto-stopped - race finished')
+        return
+      }
+
+      pollingIntervalRef.current = setTimeout(async () => {
+        // Staggered delay to coordinate with main polling cycle (100-300ms)
+        const staggerDelay = Math.random() * 200 + 100
+        await new Promise(resolve => setTimeout(resolve, staggerDelay))
+
+        const success = await fetchTimelineData()
+
+        if (success && isPollingActive) {
+          scheduleNextPoll() // Schedule next poll if successful and still active
+        } else if (!success && errorCountRef.current < maxErrors) {
+          // Exponential backoff on error
+          const backoffDelay = Math.min(1000 * Math.pow(2, errorCountRef.current), 30000)
+          setTimeout(() => {
+            if (isPollingActive) {
+              scheduleNextPoll()
+            }
+          }, backoffDelay)
+        }
+      }, currentInterval)
+    }
+
+    // Initial fetch then start polling cycle
+    fetchTimelineData().then((success) => {
+      if (success && isPollingActive) {
+        scheduleNextPoll()
+      }
+    })
+
+    loggerRef.current.debug('Money flow polling started', {
+      interval,
+      timeToStart,
+      raceStatus
+    })
+  }, [raceId, entrantIds, raceStartTime, raceStatus, getTimeToStart, calculatePollingInterval, fetchTimelineData, isPollingActive, maxErrors])
+
+  // Stop internal polling
+  const stopPolling = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      clearTimeout(pollingIntervalRef.current)
+      pollingIntervalRef.current = null
+    }
+    setIsPollingActive(false)
+    loggerRef.current.debug('Money flow polling stopped')
+  }, [])
+
+  // Set up polling lifecycle management
+  useEffect(() => {
+    if (!raceId || entrantIds.length === 0) return
+
+    // Check if race is complete to avoid unnecessary polling
+    const isRaceComplete =
+      raceStatus &&
+      ['Final', 'Finalized', 'Abandoned', 'Cancelled'].includes(raceStatus)
+
+    if (isRaceComplete) {
+      // Race is complete, stop any polling and do final fetch if needed
+      stopPolling()
+      if (timelineData.size === 0) {
+        fetchTimelineData() // One final fetch for completed race data
+      }
+      return
+    }
+
+    // Start polling if we have the required data
+    if (raceStartTime && raceStatus) {
+      startPolling()
+    } else {
+      // Initial fetch without polling if we don't have start time/status yet
+      fetchTimelineData()
+    }
+
+    loggerRef.current.debug('Money flow timeline polling lifecycle initialized', {
+      raceId,
+      entrantIds: entrantIds.length,
+      hasStartTime: Boolean(raceStartTime),
+      raceStatus,
+      isRaceComplete
+    })
+
+    return () => {
+      stopPolling()
+    }
+  }, [raceId, entrantIds, entrantKey, raceStatus, raceStartTime, startPolling, stopPolling, fetchTimelineData, timelineData.size])
+
   return {
     timelineData,
     gridData,
     isLoading,
     error,
     lastUpdate,
-    refetch: fetchTimelineData,
+    refetch: async () => { await fetchTimelineData(); },
     getEntrantDataForInterval,
     getWinPoolData,
     getPlacePoolData,
     getOddsData,
+    // NEW: Polling coordination state
+    isPollingActive,
+    startPolling,
+    stopPolling,
   }
 }
 
