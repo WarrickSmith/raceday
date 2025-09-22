@@ -756,6 +756,8 @@ Polling behavior needs to be configurable and monitorable for debugging, optimiz
 - Environment configuration patterns in project
 - Existing logging utility: `/client/src/utils/logging.ts`
 - Debug tooling examples in current codebase
+- NEXT_PUBLIC_ENABLE_CONNECTION_MONITOR=true currently exists in .env.local
+- enviornment variable changes in .env.local need to be replicated to .env.example with explanation for values and placeholders for values.
 
 **Acceptance Criteria**:
 
