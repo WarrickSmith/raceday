@@ -111,10 +111,6 @@ export function useRaceNavigation({
   const navigateToMeetings = useCallback(() => {
     console.log(`🏠 [${new Date().toISOString()}] Starting navigation to meetings`);
 
-    if (!isMountedRef.current) {
-      return;
-    }
-
     setNavigationState({
       isNavigating: true,
       navigationTarget: 'meetings',
@@ -128,6 +124,13 @@ export function useRaceNavigation({
       // Navigate immediately
       router.push('/');
       console.log(`✅ Navigation initiated to meetings`);
+
+      // Reset navigation state after successful navigation
+      setNavigationState({
+        isNavigating: false,
+        navigationTarget: null,
+        error: null,
+      });
 
       // Call completion callback
       onNavigationComplete?.();
