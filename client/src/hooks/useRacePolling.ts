@@ -1,5 +1,5 @@
 /**
- * Core Race Polling Hook - Task 1 Implementation
+ * Core Race Polling Hook - Task 1 & 3 Implementation
  *
  * Provides client-side polling infrastructure that follows 2x backend frequency requirements.
  * Replaces real-time subscriptions with predictable, controllable data update mechanism.
@@ -8,7 +8,9 @@
  * - Dynamic intervals based on race timing and status (2x backend frequency)
  * - Coordinated fetching for all data sources
  * - Automatic termination when race status becomes 'final'
- * - Comprehensive error handling with exponential backoff
+ * - Comprehensive error handling with exponential backoff (Task 3)
+ * - Circuit breaker pattern for resilience (Task 3)
+ * - Fallback to cached data during failures (Task 3)
  * - Background tab optimization
  * - Integration with existing RaceContext architecture
  */
@@ -17,6 +19,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useLogger } from '@/utils/logging'
+import { createPollingErrorHandler, type ErrorClassification } from '@/utils/pollingErrorHandler'
+import { raceDataCache, type DataFreshness, type CachedRaceData } from '@/utils/pollingCache'
 import type { Race, Entrant } from '@/types/meetings'
 import type { RacePoolData } from '@/types/racePools'
 
@@ -51,15 +55,18 @@ interface PollingState {
   backgroundOptimization: boolean
 }
 
-// Error handling state
+// Enhanced error handling state with Task 3 features
 interface ErrorState {
   lastError: Error | null
+  errorClassification: ErrorClassification | null
   retryAttempt: number
   circuitBreakerOpen: boolean
   backoffDelay: number
+  canUseFallback: boolean
+  dataFreshness: DataFreshness
 }
 
-// Hook return interface
+// Hook return interface with Task 3 enhancements
 interface UseRacePollingResult {
   pollingState: PollingState
   errorState: ErrorState
@@ -68,13 +75,25 @@ interface UseRacePollingResult {
   resumePolling: () => void
   stopPolling: () => void
   forceUpdate: () => Promise<void>
+  getFallbackData: () => CachedRaceData | null
+  getDataFreshness: () => DataFreshness
 }
 
 /**
- * Core client-side polling hook implementing Task 1 requirements
+ * Core client-side polling hook implementing Task 1 & 3 requirements
  */
 export function useRacePolling(config: PollingConfig): UseRacePollingResult {
   const logger = useLogger('useRacePolling')
+
+  // Enhanced error handler with Task 3 capabilities
+  const errorHandler = useRef(createPollingErrorHandler({
+    maxRetries: 5,
+    baseDelay: 1000,
+    maxDelay: 30000,
+    circuitBreakerThreshold: 5,
+    circuitBreakerTimeout: 60000,
+    enableCircuitBreaker: true
+  }))
 
   // Polling state management
   const [pollingState, setPollingState] = useState<PollingState>({
@@ -89,12 +108,15 @@ export function useRacePolling(config: PollingConfig): UseRacePollingResult {
     backgroundOptimization: false,
   })
 
-  // Error handling state
+  // Enhanced error handling state with Task 3 features
   const [errorState, setErrorState] = useState<ErrorState>({
     lastError: null,
+    errorClassification: null,
     retryAttempt: 0,
     circuitBreakerOpen: false,
-    backoffDelay: 1000, // Start with 1 second
+    backoffDelay: 1000,
+    canUseFallback: false,
+    dataFreshness: 'fresh' as DataFreshness,
   })
 
   // Refs for cleanup and state management
@@ -317,16 +339,16 @@ export function useRacePolling(config: PollingConfig): UseRacePollingResult {
   }, [config, logger])
 
   /**
-   * Execute single polling cycle with error handling
+   * Execute single polling cycle with enhanced error handling (Task 3)
    */
   const executePoll = useCallback(async (): Promise<void> => {
     if (!mountedRef.current || pollingState.isStopped || pollingState.isPaused) {
       return
     }
 
-    // Check circuit breaker
-    if (errorState.circuitBreakerOpen) {
-      logger.debug('Circuit breaker open, skipping poll')
+    // Check circuit breaker using Task 3 error handler
+    if (!errorHandler.current.canAttemptRequest()) {
+      logger.debug('Circuit breaker blocking request')
       return
     }
 
@@ -338,6 +360,18 @@ export function useRacePolling(config: PollingConfig): UseRacePollingResult {
 
     try {
       const data = await fetchRaceData()
+
+      // Cache successful data fetch
+      raceDataCache.setRaceData(
+        config.raceId,
+        data.race,
+        data.entrants,
+        data.pools,
+        data.moneyFlowUpdateTrigger
+      )
+
+      // Handle success with error handler
+      errorHandler.current.handleSuccess()
 
       // Update polling state on success
       setPollingState(prev => ({
@@ -351,9 +385,12 @@ export function useRacePolling(config: PollingConfig): UseRacePollingResult {
       setErrorState(prev => ({
         ...prev,
         lastError: null,
+        errorClassification: null,
         retryAttempt: 0,
         circuitBreakerOpen: false,
-        backoffDelay: 1000, // Reset backoff
+        backoffDelay: 1000,
+        canUseFallback: true,
+        dataFreshness: 'fresh' as DataFreshness,
       }))
 
       // Notify parent component of data update
@@ -367,25 +404,51 @@ export function useRacePolling(config: PollingConfig): UseRacePollingResult {
     } catch (error) {
       const pollingError = error instanceof Error ? error : new Error('Unknown polling error')
 
+      // Use Task 3 error handler for sophisticated error handling
+      const errorResponse = errorHandler.current.handleError(pollingError)
+
       logger.error('Polling cycle failed', {
         raceId: config.raceId,
         error: pollingError.message,
-        consecutiveErrors: pollingState.consecutiveErrors + 1,
+        classification: errorResponse.classification,
+        shouldRetry: errorResponse.shouldRetry,
+        retryDelay: errorResponse.retryDelay,
+        circuitBreakerState: errorResponse.circuitBreakerState,
       })
 
-      // Update error state
-      setErrorState(prev => {
-        const newConsecutiveErrors = pollingState.consecutiveErrors + 1
-        const shouldOpenCircuitBreaker = newConsecutiveErrors >= 5
-        const newBackoffDelay = Math.min(prev.backoffDelay * 2, 30000) // Max 30 seconds
+      // Try to use fallback data if available
+      let fallbackData: RaceData | null = null
+      if (raceDataCache.canUseFallback(`race:${config.raceId}`)) {
+        const cachedData = raceDataCache.getRaceData(config.raceId)
+        if (cachedData) {
+          fallbackData = {
+            race: cachedData.race,
+            entrants: cachedData.entrants,
+            pools: cachedData.pools,
+            moneyFlowUpdateTrigger: cachedData.moneyFlowUpdateTrigger,
+          }
 
-        return {
-          lastError: pollingError,
-          retryAttempt: prev.retryAttempt + 1,
-          circuitBreakerOpen: shouldOpenCircuitBreaker,
-          backoffDelay: newBackoffDelay,
+          logger.debug('Using fallback data', {
+            raceId: config.raceId,
+            dataSource: cachedData.dataSource,
+            lastUpdate: cachedData.lastSuccessfulFetch,
+          })
+
+          // Notify parent with fallback data but mark it as stale
+          config.onDataUpdate(fallbackData)
         }
-      })
+      }
+
+      // Update error state with Task 3 enhancements
+      setErrorState(prev => ({
+        lastError: pollingError,
+        errorClassification: errorResponse.classification,
+        retryAttempt: errorHandler.current.getState().retryCount,
+        circuitBreakerOpen: errorResponse.circuitBreakerState === 'open',
+        backoffDelay: errorResponse.retryDelay,
+        canUseFallback: fallbackData !== null,
+        dataFreshness: fallbackData ? 'stale' as DataFreshness : prev.dataFreshness,
+      }))
 
       // Update polling state
       setPollingState(prev => ({
@@ -393,10 +456,12 @@ export function useRacePolling(config: PollingConfig): UseRacePollingResult {
         consecutiveErrors: prev.consecutiveErrors + 1,
       }))
 
-      // Notify parent component of error
-      config.onError(pollingError)
+      // Only notify parent of error if no fallback data was provided
+      if (!fallbackData) {
+        config.onError(pollingError)
+      }
     }
-  }, [config, pollingState, errorState, fetchRaceData, logger])
+  }, [config, pollingState, fetchRaceData, logger])
 
   /**
    * Schedule next polling cycle based on current race state with enhanced optimizations
@@ -720,6 +785,21 @@ export function useRacePolling(config: PollingConfig): UseRacePollingResult {
     }
   }, [config.raceStatus, config.raceId, pollingState.isActive, stopPolling, logger])
 
+  /**
+   * Get fallback data from cache (Task 3)
+   */
+  const getFallbackData = useCallback((): CachedRaceData | null => {
+    return raceDataCache.getRaceData(config.raceId)
+  }, [config.raceId])
+
+  /**
+   * Get current data freshness level (Task 3)
+   */
+  const getDataFreshness = useCallback((): DataFreshness => {
+    const cacheData = raceDataCache.getRaceDataWithIndicators(config.raceId)
+    return cacheData.freshness
+  }, [config.raceId])
+
   return {
     pollingState,
     errorState,
@@ -728,5 +808,7 @@ export function useRacePolling(config: PollingConfig): UseRacePollingResult {
     resumePolling,
     stopPolling,
     forceUpdate,
+    getFallbackData,
+    getDataFreshness,
   }
 }
