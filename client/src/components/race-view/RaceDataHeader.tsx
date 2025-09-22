@@ -15,7 +15,10 @@ import type {
 import { PollingHealth } from '@/components/polling/PollingStatus'
 import type { DataFreshness } from '@/utils/pollingCache'
 import type { CircuitBreakerState } from '@/utils/pollingErrorHandler'
-import type { ConnectionState } from '@/hooks/useUnifiedRaceRealtime'
+import type {
+  ConnectionHealthSnapshot,
+  ConnectionState,
+} from '@/hooks/useUnifiedRaceRealtime'
 
 interface RaceDataHeaderProps {
   className?: string
@@ -23,19 +26,7 @@ interface RaceDataHeaderProps {
   entrants?: Entrant[]
   meeting?: Meeting | null
   navigationData?: RaceNavigationData | null
-  connectionHealth?: {
-    isHealthy: boolean
-    avgLatency: number | null
-    uptime: number
-    connectionCount?: number
-    activeConnections?: number
-    totalChannels?: number
-    uniqueChannels?: string[]
-    totalMessages?: number
-    totalErrors?: number
-    isOverLimit?: boolean
-    emergencyFallback?: boolean
-  }
+  connectionHealth?: ConnectionHealthSnapshot
   pollingInfo?: RacePollingHeaderInfo | null
   onConfigureAlerts?: () => void
   onToggleConnectionMonitor?: () => void
@@ -88,15 +79,41 @@ export const RaceDataHeader = memo(function RaceDataHeader({
     return () => clearInterval(timer)
   }, [])
 
-  // Get connection health status
-  const healthStatus = useMemo(() => {
-    if (!connectionHealth) return { status: 'unknown', color: 'gray' }
+  const alertSummary = useMemo(() => {
+    if (!connectionHealth?.alerts || connectionHealth.alerts.length === 0) {
+      return null
+    }
 
-    if (connectionHealth.isHealthy) return { status: 'Live', color: 'green' }
-    if (connectionHealth.avgLatency && connectionHealth.avgLatency > 0)
+    const hasError = connectionHealth.alerts.some(alert => alert.level === 'error')
+    const hasWarning = connectionHealth.alerts.some(alert => alert.level === 'warning')
+
+    return {
+      severity: hasError ? 'error' : hasWarning ? 'warning' : 'info',
+      count: connectionHealth.alerts.length,
+    }
+  }, [connectionHealth?.alerts])
+
+  const healthStatus = useMemo(() => {
+    if (!connectionHealth) return { status: 'Unknown', color: 'gray' }
+
+    if (alertSummary?.severity === 'error') {
+      return { status: 'Issue', color: 'red' }
+    }
+
+    if (alertSummary?.severity === 'warning') {
+      return { status: 'Attention', color: 'yellow' }
+    }
+
+    if (connectionHealth.isHealthy) {
+      return { status: 'Live', color: 'green' }
+    }
+
+    if (connectionHealth.avgLatency && connectionHealth.avgLatency > 150) {
       return { status: 'Slow', color: 'yellow' }
-    return { status: 'Offline', color: 'red' }
-  }, [connectionHealth])
+    }
+
+    return { status: 'Monitoring', color: 'gray' }
+  }, [alertSummary, connectionHealth])
 
   // Memoized calculations to reduce re-renders (move before early return to avoid hook call errors)
   const formattedTime = useMemo(
@@ -357,7 +374,7 @@ export const RaceDataHeader = memo(function RaceDataHeader({
             <div className="text-xs text-gray-500 font-bold uppercase">
               STATUS
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2">
               <div
                 className={`w-2 h-2 rounded-full bg-${healthStatus.color}-500`}
               ></div>
@@ -366,24 +383,21 @@ export const RaceDataHeader = memo(function RaceDataHeader({
               >
                 {healthStatus.status}
               </span>
+              {alertSummary && (
+                <span
+                  className={`text-xs px-1.5 py-0.5 rounded font-semibold ${
+                    alertSummary.severity === 'error'
+                      ? 'bg-red-100 text-red-700'
+                      : alertSummary.severity === 'warning'
+                      ? 'bg-yellow-100 text-yellow-700'
+                      : 'bg-blue-100 text-blue-700'
+                  }`}
+                >
+                  {alertSummary.count} alert
+                  {alertSummary.count > 1 ? 's' : ''}
+                </span>
+              )}
             </div>
-            {/* Connection & Channel Count Indicators (Development Only) */}
-            {showDevelopmentFeatures() && connectionHealth?.connectionCount !== undefined && (
-              <div className="flex items-center gap-1">
-                <div className={`text-xs px-1 py-0.5 rounded font-mono ${
-                  connectionHealth.isOverLimit ? 'bg-red-100 text-red-700' :
-                  (connectionHealth.connectionCount || 0) > 7 ? 'bg-yellow-100 text-yellow-700' :
-                  'bg-green-100 text-green-700'
-                }`}>
-                  C[{connectionHealth.connectionCount}]
-                </div>
-                {connectionHealth.totalChannels !== undefined && (
-                  <div className="text-xs px-1 py-0.5 rounded font-mono bg-purple-100 text-purple-700">
-                    Ch[{connectionHealth.totalChannels}]
-                  </div>
-                )}
-              </div>
-            )}
           </div>
 
           <div className="flex items-center gap-1">

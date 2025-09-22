@@ -23,10 +23,22 @@ import { useLogger } from '@/utils/logging'
 import { raceDataCache, type DataFreshness } from '@/utils/pollingCache'
 import type { Race, Entrant } from '@/types/meetings'
 import type { RacePoolData } from '@/types/racePools'
+import {
+  initializePollingMetrics,
+  markPollingActive,
+  recordPollingCycleComplete,
+  recordPollingCycleStart,
+  recordPollingError,
+  recordPollingRequest,
+  recordPollingSchedule,
+  recordPollingSuccess,
+  type PollingEndpointKey,
+} from '@/utils/pollingMetrics'
 
 const REQUEST_RATE_LIMIT_WINDOW_MS = 60_000
 const MAX_REQUESTS_PER_WINDOW = 24
-const CIRCUIT_BREAKER_THRESHOLD = 4
+const DEFAULT_CIRCUIT_BREAKER_THRESHOLD = 5
+const DEFAULT_REQUEST_TIMEOUT_MS = 10_000
 const CIRCUIT_BREAKER_RESET_MS = 60_000
 const SLOW_RESPONSE_THRESHOLD_MS = 2_500
 const MAX_LATENCY_SAMPLES = 5
@@ -62,6 +74,9 @@ export interface CoordinatedPollingConfig {
   inactivePauseDurationMs?: number
   onDataUpdate?: (data: RaceDataSources & { updateTrigger: number }) => void
   onError?: (error: Error, source?: string) => void
+  debugMode?: boolean
+  requestTimeoutMs?: number
+  maxRetries?: number
 }
 
 // Polling coordination state
@@ -71,9 +86,9 @@ interface CoordinationState {
   isStopped: boolean
   currentInterval: number
   lastPollTime: Date | null
-  successfulSources: Set<string>
-  failedSources: Set<string>
-  requestsInFlight: Set<string>
+  successfulSources: Set<PollingEndpointKey>
+  failedSources: Set<PollingEndpointKey>
+  requestsInFlight: Set<PollingEndpointKey>
   totalPolls: number
   updateTrigger: number
 }
@@ -111,6 +126,17 @@ export function useCoordinatedRacePolling(
 ): UseCoordinatedRacePollingResult {
   const logger = useLogger('useCoordinatedRacePolling')
 
+  useEffect(() => {
+    if (!config.raceId) {
+      return
+    }
+
+    initializePollingMetrics(config.raceId, {
+      debugMode: config.debugMode,
+      maxRetries: config.maxRetries ?? DEFAULT_CIRCUIT_BREAKER_THRESHOLD,
+    })
+  }, [config.debugMode, config.maxRetries, config.raceId])
+
   // Coordination state management
   const [coordinationState, setCoordinationState] = useState<CoordinationState>({
     isActive: false,
@@ -118,9 +144,9 @@ export function useCoordinatedRacePolling(
     isStopped: false,
     currentInterval: 900000, // Default 15 minutes
     lastPollTime: null,
-    successfulSources: new Set(),
-    failedSources: new Set(),
-    requestsInFlight: new Set(),
+    successfulSources: new Set<PollingEndpointKey>(),
+    failedSources: new Set<PollingEndpointKey>(),
+    requestsInFlight: new Set<PollingEndpointKey>(),
     totalPolls: 0,
     updateTrigger: 0,
   })
@@ -141,7 +167,7 @@ export function useCoordinatedRacePolling(
 
   // Refs for cleanup and request management
   const pollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const abortControllersRef = useRef<Map<string, AbortController>>(new Map())
+  const abortControllersRef = useRef<Map<PollingEndpointKey, AbortController>>(new Map())
   const mountedRef = useRef(true)
   const lastPollDataRef = useRef<RaceDataSources | null>(null)
   const requestMetadataRef = useRef<Map<string, { etag?: string; lastModified?: string }>>(new Map())
@@ -188,12 +214,17 @@ export function useCoordinatedRacePolling(
     return (startTime.getTime() - now.getTime()) / (1000 * 60)
   }, [])
 
+  const getRequestKey = useCallback(
+    (source: PollingEndpointKey): string => `${source}:${config.raceId}`,
+    [config.raceId],
+  )
+
   /**
    * Get cached headers for conditional requests
    */
   const getCachedHeaders = useCallback(
-    (source: string): Record<string, string> => {
-      const metadata = requestMetadataRef.current.get(`${source}:${config.raceId}`)
+    (source: PollingEndpointKey): Record<string, string> => {
+      const metadata = requestMetadataRef.current.get(getRequestKey(source))
       const headers: Record<string, string> = {}
 
       if (metadata?.etag) {
@@ -206,13 +237,13 @@ export function useCoordinatedRacePolling(
 
       return headers
     },
-    [config.raceId]
+    [getRequestKey]
   )
 
   /**
    * Get cached data for a source
    */
-  const getCachedData = useCallback((source: string, raceId: string): unknown => {
+  const getCachedData = useCallback((source: PollingEndpointKey, raceId: string): unknown => {
     const cached = raceDataCache.getRaceData(raceId)
     if (!cached) return null
 
@@ -224,7 +255,10 @@ export function useCoordinatedRacePolling(
       case 'pools':
         return { pools: cached.pools }
       case 'moneyFlow':
-        return { moneyFlow: [] } // Money flow needs special handling
+        if (lastPollDataRef.current?.moneyFlow) {
+          return { moneyFlow: lastPollDataRef.current.moneyFlow }
+        }
+        return null
       default:
         return null
     }
@@ -234,7 +268,7 @@ export function useCoordinatedRacePolling(
    * Cache response data with optional ETag
    */
   const cacheResponseData = useCallback((
-    source: string,
+    source: PollingEndpointKey,
     raceId: string,
     data: unknown,
     metadata?: { etag?: string | null; lastModified?: string | null }
@@ -270,36 +304,48 @@ export function useCoordinatedRacePolling(
           currentCached?.moneyFlowUpdateTrigger || 0
         )
         break
+      case 'moneyFlow':
+        raceDataCache.setRaceData(
+          raceId,
+          currentCached?.race || null,
+          currentCached?.entrants || [],
+          currentCached?.pools || null,
+          currentCached?.moneyFlowUpdateTrigger || 0
+        )
+        break
     }
 
     if (metadata?.etag || metadata?.lastModified) {
-      requestMetadataRef.current.set(`${source}:${raceId}`, {
+      requestMetadataRef.current.set(getRequestKey(source), {
         etag: metadata?.etag ?? undefined,
         lastModified: metadata?.lastModified ?? undefined
       })
     }
-  }, [])
+  }, [getRequestKey])
 
-  const recordRequestTimestamp = useCallback((source: string, timestamp: number): void => {
-    const timestamps = requestTimestampsRef.current.get(source) ?? []
+  const recordRequestTimestamp = useCallback((source: PollingEndpointKey, timestamp: number): void => {
+    const key = getRequestKey(source)
+    const timestamps = requestTimestampsRef.current.get(key) ?? []
     const recent = timestamps.filter(value => timestamp - value < REQUEST_RATE_LIMIT_WINDOW_MS)
     recent.push(timestamp)
-    requestTimestampsRef.current.set(source, recent)
-  }, [])
+    requestTimestampsRef.current.set(key, recent)
+  }, [getRequestKey])
 
-  const isRateLimited = useCallback((source: string, timestamp: number): boolean => {
-    const timestamps = requestTimestampsRef.current.get(source) ?? []
+  const isRateLimited = useCallback((source: PollingEndpointKey, timestamp: number): boolean => {
+    const key = getRequestKey(source)
+    const timestamps = requestTimestampsRef.current.get(key) ?? []
     const recent = timestamps.filter(value => timestamp - value < REQUEST_RATE_LIMIT_WINDOW_MS)
-    requestTimestampsRef.current.set(source, recent)
+    requestTimestampsRef.current.set(key, recent)
     return recent.length >= MAX_REQUESTS_PER_WINDOW
-  }, [])
+  }, [getRequestKey])
 
-  const updatePerformanceMetrics = useCallback((source: string, durationMs: number): void => {
-    const metrics = performanceMetricsRef.current.get(source) ?? { samples: [], average: durationMs }
+  const updatePerformanceMetrics = useCallback((source: PollingEndpointKey, durationMs: number): void => {
+    const key = getRequestKey(source)
+    const metrics = performanceMetricsRef.current.get(key) ?? { samples: [], average: durationMs }
     const samples = [...metrics.samples, durationMs].slice(-MAX_LATENCY_SAMPLES)
     const average = samples.reduce((total, value) => total + value, 0) / samples.length
-    performanceMetricsRef.current.set(source, { samples, average })
-  }, [])
+    performanceMetricsRef.current.set(key, { samples, average })
+  }, [getRequestKey])
 
   const getSlowestAverage = useCallback((): number => {
     let slowest = 0
@@ -315,24 +361,25 @@ export function useCoordinatedRacePolling(
    * Fetch data from a specific source with error handling
    */
   const fetchDataSource = useCallback(async (
-    source: string,
+    source: PollingEndpointKey,
     endpoint: string,
     delay: number = 0
   ): Promise<unknown> => {
     const { raceId } = config
 
-    const existingRequest = inFlightRequestsRef.current.get(source)
+    const requestKey = getRequestKey(source)
+    const existingRequest = inFlightRequestsRef.current.get(requestKey)
     if (existingRequest) {
       logger.debug(`Joining in-flight request for ${source}`)
       return existingRequest
     }
 
     const now = Date.now()
-    const circuitState = circuitBreakerRef.current.get(source)
+    const circuitState = circuitBreakerRef.current.get(requestKey)
 
     if (circuitState?.open) {
       if (circuitState.openedAt && now - circuitState.openedAt > CIRCUIT_BREAKER_RESET_MS) {
-        circuitBreakerRef.current.set(source, { open: false, openedAt: null })
+        circuitBreakerRef.current.set(requestKey, { open: false, openedAt: null })
       } else {
         logger.warn(`${source} circuit breaker open, serving cached data`, { raceId })
         setDataFreshness('acceptable')
@@ -356,6 +403,8 @@ export function useCoordinatedRacePolling(
         requestsInFlight: new Set([...prev.requestsInFlight, source])
       }))
 
+      let timeoutId: ReturnType<typeof setTimeout> | undefined
+
       try {
         if (delay > 0) {
           await new Promise(resolve => setTimeout(resolve, delay))
@@ -363,7 +412,7 @@ export function useCoordinatedRacePolling(
 
         let requestUrl = `/api/race/${raceId}${endpoint}`
 
-        if (source === 'money-flow' && endpoint.includes('money-flow-timeline')) {
+        if (source === 'moneyFlow' && endpoint.includes('money-flow-timeline')) {
           const currentEntrants = data.entrants?.length > 0
             ? data.entrants
             : raceDataCache.getRaceData(raceId)?.entrants || []
@@ -387,11 +436,17 @@ export function useCoordinatedRacePolling(
         const abortController = new AbortController()
         abortControllersRef.current.set(source, abortController)
 
+        const timeoutMs = config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
+        timeoutId = setTimeout(() => {
+          abortController.abort()
+        }, timeoutMs)
+
         const headers = {
           'Cache-Control': 'no-cache',
           ...getCachedHeaders(source)
         }
 
+        recordPollingRequest({ raceId, endpoint: source })
         recordRequestTimestamp(source, Date.now())
 
         const start = typeof performance !== 'undefined' ? performance.now() : Date.now()
@@ -401,7 +456,8 @@ export function useCoordinatedRacePolling(
           headers
         })
         const end = typeof performance !== 'undefined' ? performance.now() : Date.now()
-        updatePerformanceMetrics(source, end - start)
+        const durationMs = end - start
+        updatePerformanceMetrics(source, durationMs)
 
         if (!response.ok) {
           throw new Error(`${source} fetch failed: ${response.statusText}`)
@@ -433,7 +489,7 @@ export function useCoordinatedRacePolling(
             }
           }))
 
-          circuitBreakerRef.current.set(source, { open: false, openedAt: null })
+          circuitBreakerRef.current.set(requestKey, { open: false, openedAt: null })
           setDataFreshness('fresh')
           return cached
         }
@@ -441,6 +497,8 @@ export function useCoordinatedRacePolling(
         const responseData = await response.json()
 
         cacheResponseData(source, raceId, responseData, { etag, lastModified })
+
+        recordPollingSuccess({ raceId, endpoint: source, durationMs })
 
         setCoordinationState(prev => ({
           ...prev,
@@ -458,7 +516,7 @@ export function useCoordinatedRacePolling(
           }
         }))
 
-        circuitBreakerRef.current.set(source, { open: false, openedAt: null })
+        circuitBreakerRef.current.set(requestKey, { open: false, openedAt: null })
         return responseData
       } catch (error) {
         const fetchError = error instanceof Error ? error : new Error(`Unknown error in ${source}`)
@@ -470,6 +528,8 @@ export function useCoordinatedRacePolling(
           return null
         }
 
+        recordPollingError({ raceId, endpoint: source, error: fetchError })
+
         setCoordinationState(prev => ({
           ...prev,
           failedSources: new Set([...prev.failedSources, source]),
@@ -480,8 +540,8 @@ export function useCoordinatedRacePolling(
           const previous = prev[source]
           const nextErrorCount = (previous?.errorCount ?? 0) + 1
 
-          if (nextErrorCount >= CIRCUIT_BREAKER_THRESHOLD) {
-            circuitBreakerRef.current.set(source, { open: true, openedAt: Date.now() })
+          if (nextErrorCount >= (config.maxRetries ?? DEFAULT_CIRCUIT_BREAKER_THRESHOLD)) {
+            circuitBreakerRef.current.set(requestKey, { open: true, openedAt: Date.now() })
             logger.warn(`${source} circuit breaker opened`, { raceId, errorCount: nextErrorCount })
           }
 
@@ -522,16 +582,20 @@ export function useCoordinatedRacePolling(
         }))
 
         abortControllersRef.current.delete(source)
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+          timeoutId = undefined
+        }
       }
     }
 
     const requestPromise = performRequest()
-    inFlightRequestsRef.current.set(source, requestPromise)
+    inFlightRequestsRef.current.set(requestKey, requestPromise)
 
     try {
       return await requestPromise
     } finally {
-      inFlightRequestsRef.current.delete(source)
+      inFlightRequestsRef.current.delete(requestKey)
     }
   }, [
     cacheResponseData,
@@ -539,6 +603,7 @@ export function useCoordinatedRacePolling(
     data.entrants,
     getCachedData,
     getCachedHeaders,
+    getRequestKey,
     isRateLimited,
     logger,
     recordRequestTimestamp,
@@ -558,6 +623,9 @@ export function useCoordinatedRacePolling(
       totalPolls: coordinationState.totalPolls
     })
 
+    const cycleStart = Date.now()
+    recordPollingCycleStart({ raceId: config.raceId })
+
     try {
       // Phase 1: Fetch core race and entrants data first (they're dependencies for money-flow)
       const [raceResult, entrantsResult] = await Promise.allSettled([
@@ -568,7 +636,7 @@ export function useCoordinatedRacePolling(
       // Phase 2: Fetch pools and money-flow after core data is available
       const [poolsResult, moneyFlowResult] = await Promise.allSettled([
         fetchDataSource('pools', '/pools', 200),           // 200ms delay
-        fetchDataSource('money-flow', '/money-flow-timeline', 300) // 300ms delay - requires entrants
+        fetchDataSource('moneyFlow', '/money-flow-timeline', 300) // 300ms delay - requires entrants
       ])
 
       // Process results and maintain data consistency
@@ -645,7 +713,7 @@ export function useCoordinatedRacePolling(
       if (raceResult.status === 'rejected') criticalErrors.push('race data')
       if (entrantsResult.status === 'rejected') criticalErrors.push('entrants data')
       if (poolsResult.status === 'rejected') nonCriticalErrors.push('pools data')
-      if (moneyFlowResult.status === 'rejected') nonCriticalErrors.push('money-flow data')
+      if (moneyFlowResult.status === 'rejected') nonCriticalErrors.push('money flow data')
 
       // Only report errors that aren't intentional aborts
       const reportableErrors = errors.filter(e =>
@@ -683,6 +751,8 @@ export function useCoordinatedRacePolling(
       if (config.onError) {
         config.onError(pollingError)
       }
+    } finally {
+      recordPollingCycleComplete({ raceId: config.raceId, durationMs: Date.now() - cycleStart })
     }
   }, [
     config,
@@ -717,6 +787,7 @@ export function useCoordinatedRacePolling(
         ...prev,
         isActive: false
       }))
+      markPollingActive(false)
       return
     }
 
@@ -733,6 +804,7 @@ export function useCoordinatedRacePolling(
             ...prev,
             isPaused: true
           }))
+          markPollingActive(false)
         }
         return
       }
@@ -744,6 +816,7 @@ export function useCoordinatedRacePolling(
           isPaused: false
         }))
       }
+      markPollingActive(true)
     }
 
     const backgroundMultiplier = config.backgroundMultiplier && config.backgroundMultiplier > 1
@@ -767,6 +840,14 @@ export function useCoordinatedRacePolling(
     const jitterRange = adjustedInterval * JITTER_PERCENTAGE
     const jitterOffset = jitterRange > 0 ? (Math.random() * jitterRange * 2) - jitterRange : 0
     const intervalWithJitter = Math.max(MINIMUM_INTERVAL_MS, Math.round(adjustedInterval + jitterOffset))
+
+    recordPollingSchedule({
+      raceId: config.raceId,
+      targetIntervalMs: baseInterval,
+      scheduledIntervalMs: intervalWithJitter,
+      jitterMs: Math.round(jitterOffset),
+      backgroundMultiplier,
+    })
 
     setCoordinationState(prev => ({
       ...prev,
@@ -820,6 +901,8 @@ export function useCoordinatedRacePolling(
       raceStatus: config.raceStatus
     })
 
+    markPollingActive(true)
+
     setCoordinationState(prev => ({
       ...prev,
       isActive: true,
@@ -840,6 +923,8 @@ export function useCoordinatedRacePolling(
    */
   const pausePolling = useCallback(() => {
     logger.debug('Pausing coordinated polling', { raceId: config.raceId })
+
+    markPollingActive(false)
 
     setCoordinationState(prev => ({
       ...prev,
@@ -868,6 +953,8 @@ export function useCoordinatedRacePolling(
 
     logger.debug('Resuming coordinated polling', { raceId: config.raceId })
 
+    markPollingActive(true)
+
     setCoordinationState(prev => ({
       ...prev,
       isPaused: false
@@ -884,6 +971,8 @@ export function useCoordinatedRacePolling(
       raceId: config.raceId,
       totalPolls: coordinationState.totalPolls
     })
+
+    markPollingActive(false)
 
     setCoordinationState(prev => ({
       ...prev,
@@ -957,6 +1046,8 @@ export function useCoordinatedRacePolling(
       // Use captured reference to avoid stale closure
       abortControllersRefCurrent.current.forEach(controller => controller.abort())
       abortControllersRefCurrent.current.clear()
+
+      markPollingActive(false)
     }
   }, [])
 

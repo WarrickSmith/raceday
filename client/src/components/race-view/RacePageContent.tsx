@@ -12,6 +12,7 @@ import AlertsConfigModal from '@/components/alerts/AlertsConfigModal'
 import type { RaceStatus } from '@/types/racePools'
 import type { CircuitBreakerState } from '@/utils/pollingErrorHandler'
 import type { DataFreshness } from '@/utils/pollingCache'
+import { showDevelopmentFeatures } from '@/utils/environment'
 
 interface RacePollingInfo {
   isActive: boolean
@@ -32,6 +33,7 @@ export function RacePageContent() {
 
   // Connection Monitor state (development only)
   const [showConnectionMonitor, setShowConnectionMonitor] = useState(false)
+  const connectionMonitorEnabled = showDevelopmentFeatures()
 
   // Unified real-time subscription for all race page data
   const realtimeData = useUnifiedRaceRealtime({
@@ -223,16 +225,18 @@ export function RacePageContent() {
           pollingInfo={pollingInfo}
           onConfigureAlerts={() => setIsAlertsModalOpen(true)}
           onToggleConnectionMonitor={() => setShowConnectionMonitor(!showConnectionMonitor)}
-          showConnectionMonitor={showConnectionMonitor}
+          showConnectionMonitor={connectionMonitorEnabled && showConnectionMonitor}
         />
       </header>
 
       {/* Connection Monitor - Between Header and Body */}
-      <ConnectionMonitor
-        isOpen={showConnectionMonitor}
-        onToggle={() => setShowConnectionMonitor(!showConnectionMonitor)}
-        className="race-layout-connection-monitor"
-      />
+      {connectionMonitorEnabled && (
+        <ConnectionMonitor
+          isOpen={showConnectionMonitor}
+          onToggle={() => setShowConnectionMonitor(!showConnectionMonitor)}
+          className="race-layout-connection-monitor"
+        />
+      )}
 
       {/* Error Message */}
       {(error || realtimeData.error) && (

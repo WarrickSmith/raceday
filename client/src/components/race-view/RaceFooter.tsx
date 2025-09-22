@@ -13,7 +13,10 @@ import { RaceTimingSection } from '@/components/race-view/RaceTimingSection'
 import { RacePoolsSection } from '@/components/race-view/RacePoolsSection'
 import { RaceResultsSection } from '@/components/race-view/RaceResultsSection'
 import type { DataFreshness } from '@/utils/pollingCache'
-import type { ConnectionState } from '@/hooks/useUnifiedRaceRealtime'
+import type {
+  ConnectionHealthSnapshot,
+  ConnectionState,
+} from '@/hooks/useUnifiedRaceRealtime'
 
 // Utility function to convert cents to dollars for display (rounded to nearest dollar)
 const formatPoolAmount = (cents: number): string => {
@@ -34,11 +37,7 @@ interface RaceFooterProps {
   showResults?: boolean
   lastPoolUpdate?: Date | null
   lastResultsUpdate?: Date | null
-  connectionHealth?: {
-    isHealthy: boolean
-    avgLatency: number | null
-    uptime: number
-  }
+  connectionHealth?: ConnectionHealthSnapshot
   // Real-time race data from unified subscription
   race?: Race | null
   pollingInfo?: RacePollingFooterInfo | null
@@ -73,8 +72,6 @@ export const RaceFooter = memo(function RaceFooter({
     (race?.status?.toLowerCase() as RaceStatus) || raceStatus
   const currentPoolData = poolData
   const currentResultsData = resultsData
-  const avgLatency = connectionHealth?.avgLatency ?? null
-
   const pollingSummary = useMemo(() => {
     if (!pollingInfo) {
       return null
@@ -159,19 +156,6 @@ export const RaceFooter = memo(function RaceFooter({
     }
   }, [pollingInfo])
 
-  const latencySummary = useMemo(() => {
-    if (avgLatency === null) {
-      return { label: '—', className: 'text-gray-600' }
-    }
-    if (avgLatency > 200) {
-      return { label: `${avgLatency.toFixed(0)}ms`, className: 'text-red-600' }
-    }
-    if (avgLatency > 120) {
-      return { label: `${avgLatency.toFixed(0)}ms`, className: 'text-yellow-600' }
-    }
-    return { label: `${avgLatency.toFixed(0)}ms`, className: 'text-green-600' }
-  }, [avgLatency])
-
   // Announce results availability when they become available
   useEffect(() => {
     if (
@@ -228,47 +212,6 @@ export const RaceFooter = memo(function RaceFooter({
         </div>
       </div>
 
-      {pollingSummary && (
-        <div className="border-t border-gray-200 px-4 py-2 text-xs text-gray-500 flex flex-wrap items-center gap-x-4 gap-y-1">
-          <span>
-            Last update:{' '}
-            <span className="font-semibold text-gray-700">
-              {pollingSummary.lastUpdateLabel}
-            </span>
-          </span>
-          <span>
-            Status:{' '}
-            <span className={`font-semibold ${pollingSummary.statusClass}`}>
-              {pollingSummary.statusLabel}
-            </span>
-          </span>
-          <span>
-            Connection:{' '}
-            <span className={`font-semibold ${pollingSummary.connectionClass}`}>
-              {pollingSummary.connectionLabel}
-            </span>
-          </span>
-          <span>
-            Freshness:{' '}
-            <span className={`font-semibold ${pollingSummary.freshnessClass}`}>
-              {pollingSummary.freshnessLabel}
-            </span>
-          </span>
-          <span>
-            Cycles:{' '}
-            <span className="font-semibold text-gray-700">
-              {pollingSummary.totalUpdates}
-            </span>
-          </span>
-          <span>
-            Latency:{' '}
-            <span className={`font-semibold ${latencySummary.className}`}>
-              {latencySummary.label}
-            </span>
-          </span>
-        </div>
-      )}
-
       {/* Accessibility announcements */}
       <div className="sr-only" aria-live="polite">
         Race status: {STATUS_CONFIG[currentRaceStatus]?.description}.
@@ -281,6 +224,14 @@ export const RaceFooter = memo(function RaceFooter({
           ` Results available with ${currentResultsData.results.length} positions.`}
         {pollingSummary &&
           ` Data refreshed ${pollingSummary.lastUpdateLabel}. Connection state ${pollingSummary.connectionLabel}.`}
+        {connectionHealth &&
+          ` Polling cadence ${connectionHealth.schedule.compliance.replace('-', ' ')} with ${
+            connectionHealth.alerts.length
+          } active alert${connectionHealth.alerts.length === 1 ? '' : 's'}. Average latency ${
+            connectionHealth.avgLatency !== null
+              ? `${connectionHealth.avgLatency.toFixed(0)} milliseconds`
+              : 'unavailable'
+          }.`}
       </div>
     </div>
   )

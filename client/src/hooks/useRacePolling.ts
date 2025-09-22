@@ -24,13 +24,9 @@ import { raceDataCache, type DataFreshness, type CachedRaceData } from '@/utils/
 import { useCoordinatedRacePolling } from './useCoordinatedRacePolling'
 import type { Race, Entrant } from '@/types/meetings'
 import type { RacePoolData } from '@/types/racePools'
+import { getPollingEnvironmentConfig } from '@/utils/environment'
 
-const parsedBackgroundMultiplier = Number.parseFloat(
-  process.env.NEXT_PUBLIC_BACKGROUND_POLLING_MULTIPLIER ?? '2'
-)
-const BACKGROUND_POLLING_MULTIPLIER = Number.isFinite(parsedBackgroundMultiplier) && parsedBackgroundMultiplier > 1
-  ? parsedBackgroundMultiplier
-  : 2
+const POLLING_ENVIRONMENT = getPollingEnvironmentConfig()
 const INACTIVE_PAUSE_THRESHOLD_MS = 5 * 60 * 1000
 
 // Polling configuration interface as specified in Task 1
@@ -110,8 +106,13 @@ export function useRacePolling(config: PollingConfig): UseRacePollingResult {
     raceId: config.raceId,
     raceStartTime: config.raceStartTime,
     raceStatus: config.raceStatus,
-    enabled: true,
-    backgroundMultiplier: backgroundOptimization ? BACKGROUND_POLLING_MULTIPLIER : 1,
+    enabled: POLLING_ENVIRONMENT.enabled,
+    backgroundMultiplier: backgroundOptimization
+      ? POLLING_ENVIRONMENT.backgroundMultiplier
+      : 1,
+    debugMode: POLLING_ENVIRONMENT.debugMode,
+    requestTimeoutMs: POLLING_ENVIRONMENT.requestTimeoutMs,
+    maxRetries: POLLING_ENVIRONMENT.maxRetries,
     isDocumentHidden: backgroundOptimization,
     inactiveSince: backgroundSince,
     inactivePauseDurationMs: INACTIVE_PAUSE_THRESHOLD_MS,

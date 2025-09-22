@@ -1,8 +1,12 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { connectionMonitor } from '@/lib/appwrite-client'
 import { useLogger } from '@/utils/logging'
+import {
+  getPollingMetricsSnapshot,
+  type PollingAlert,
+  type PollingScheduleMetrics,
+} from '@/utils/pollingMetrics'
 import type {
   Race,
   Entrant,
@@ -34,6 +38,18 @@ export type ConnectionState =
   | 'connected'
   | 'disconnecting'
 
+export interface ConnectionHealthSnapshot {
+  isHealthy: boolean
+  avgLatency: number | null
+  uptime: number
+  totalUpdates: number
+  totalRequests: number
+  totalErrors: number
+  errorRate: number
+  schedule: PollingScheduleMetrics
+  alerts: PollingAlert[]
+}
+
 interface UnifiedRaceRealtimeState {
   race: Race | null
   raceDocumentId: string | null
@@ -61,19 +77,7 @@ interface UnifiedRaceRealtimeActions {
   reconnect: () => void
   clearHistory: () => void
   refetch: () => Promise<void>
-  getConnectionHealth: () => {
-    isHealthy: boolean
-    avgLatency: number | null
-    uptime: number
-    connectionCount?: number
-    activeConnections?: number
-    totalChannels?: number
-    uniqueChannels?: string[]
-    totalMessages?: number
-    totalErrors?: number
-    isOverLimit?: boolean
-    emergencyFallback?: boolean
-  }
+  getConnectionHealth: () => ConnectionHealthSnapshot
 }
 
 type CoordinatedUpdatePayload = {
@@ -541,27 +545,26 @@ export function useUnifiedRaceRealtime({
     }
   }, [cleanupSignal, clearHistory, forceUpdate])
 
-  const getConnectionHealth = useCallback(() => {
+  const getConnectionHealth = useCallback((): ConnectionHealthSnapshot => {
     const samples = latencySamples.current
     const avgLatency = samples.length
       ? samples.reduce((total, sample) => total + sample, 0) / samples.length
       : null
 
     const uptime = Date.now() - pollingStartTime.current
-    const monitorMetrics = connectionMonitor.getMetrics?.()
+    const pollingMetrics = getPollingMetricsSnapshot()
+    const hasSevereAlert = pollingMetrics.alerts.some(alert => alert.level === 'error')
 
     return {
-      isHealthy: state.isConnected && !error,
+      isHealthy: state.isConnected && !error && !hasSevereAlert,
       avgLatency,
       uptime,
-      connectionCount: monitorMetrics?.totalConnections ?? (state.isConnected ? 1 : 0),
-      activeConnections: monitorMetrics?.activeConnections ?? (state.isConnected ? 1 : 0),
-      totalChannels: monitorMetrics?.totalChannels ?? 1,
-      uniqueChannels: monitorMetrics?.uniqueChannels ?? ['polling'],
-      totalMessages: state.totalUpdates,
-      totalErrors: monitorMetrics?.totalErrors ?? totalErrorsRef.current,
-      isOverLimit: monitorMetrics?.isOverLimit ?? false,
-      emergencyFallback: monitorMetrics?.emergencyFallback ?? false,
+      totalUpdates: state.totalUpdates,
+      totalRequests: pollingMetrics.totals.requests,
+      totalErrors: pollingMetrics.totals.errors,
+      errorRate: pollingMetrics.totals.errorRate,
+      schedule: pollingMetrics.schedule,
+      alerts: pollingMetrics.alerts,
     }
   }, [error, state.isConnected, state.totalUpdates])
 
