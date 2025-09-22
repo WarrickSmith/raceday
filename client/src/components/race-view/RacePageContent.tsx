@@ -1,14 +1,28 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useRace } from '@/contexts/RaceContext'
 import { RaceDataHeader } from '@/components/race-view/RaceDataHeader'
 import { EnhancedEntrantsGrid } from '@/components/race-view/EnhancedEntrantsGrid'
 import { RaceFooter } from '@/components/race-view/RaceFooter'
 import { useUnifiedRaceRealtime } from '@/hooks/useUnifiedRaceRealtime'
+import type { ConnectionState } from '@/hooks/useUnifiedRaceRealtime'
 import { ConnectionMonitor } from '@/components/dev/ConnectionMonitor'
 import AlertsConfigModal from '@/components/alerts/AlertsConfigModal'
 import type { RaceStatus } from '@/types/racePools'
+import type { CircuitBreakerState } from '@/utils/pollingErrorHandler'
+import type { DataFreshness } from '@/utils/pollingCache'
+
+interface RacePollingInfo {
+  isActive: boolean
+  lastUpdate: Date | null
+  dataFreshness: DataFreshness
+  error: Error | null
+  circuitBreakerState: CircuitBreakerState
+  retryCount: number
+  connectionState: ConnectionState
+  totalUpdates: number
+}
 
 export function RacePageContent() {
   const { raceData, isLoading, error, subscriptionCleanupSignal } = useRace()
@@ -29,6 +43,81 @@ export function RacePageContent() {
     cleanupSignal: subscriptionCleanupSignal,
   })
 
+  const latestPollingUpdate = useMemo(() => {
+    const timestamps: Date[] = []
+
+    if (realtimeData.lastUpdate) {
+      timestamps.push(realtimeData.lastUpdate)
+    }
+    if (realtimeData.lastRaceUpdate) {
+      timestamps.push(realtimeData.lastRaceUpdate)
+    }
+    if (realtimeData.lastEntrantsUpdate) {
+      timestamps.push(realtimeData.lastEntrantsUpdate)
+    }
+    if (realtimeData.lastPoolUpdate) {
+      timestamps.push(realtimeData.lastPoolUpdate)
+    }
+    if (realtimeData.lastResultsUpdate) {
+      timestamps.push(realtimeData.lastResultsUpdate)
+    }
+
+    if (timestamps.length === 0) {
+      return null
+    }
+
+    return timestamps.slice(1).reduce<Date>((latest, current) => {
+      return current > latest ? current : latest
+    }, timestamps[0])
+  }, [
+    realtimeData.lastEntrantsUpdate,
+    realtimeData.lastPoolUpdate,
+    realtimeData.lastRaceUpdate,
+    realtimeData.lastResultsUpdate,
+    realtimeData.lastUpdate,
+  ])
+
+  const circuitBreakerState = useMemo<CircuitBreakerState>(() => {
+    if (
+      realtimeData.connectionState === 'disconnected' &&
+      realtimeData.connectionAttempts >= 5
+    ) {
+      return 'open'
+    }
+
+    if (
+      realtimeData.connectionState === 'connecting' ||
+      realtimeData.connectionState === 'disconnecting'
+    ) {
+      return 'half-open'
+    }
+
+    return 'closed'
+  }, [realtimeData.connectionAttempts, realtimeData.connectionState])
+
+  const pollingInfo = useMemo<RacePollingInfo>(
+    () => ({
+      isActive: realtimeData.isConnected,
+      lastUpdate: latestPollingUpdate,
+      dataFreshness: realtimeData.dataFreshness,
+      error: realtimeData.error,
+      circuitBreakerState,
+      retryCount: realtimeData.connectionAttempts,
+      connectionState: realtimeData.connectionState,
+      totalUpdates: realtimeData.totalUpdates,
+    }),
+    [
+      circuitBreakerState,
+      latestPollingUpdate,
+      realtimeData.connectionAttempts,
+      realtimeData.connectionState,
+      realtimeData.dataFreshness,
+      realtimeData.error,
+      realtimeData.isConnected,
+      realtimeData.totalUpdates,
+    ]
+  )
+
   if (!raceData) {
     return (
       <div className="h-screen flex flex-col overflow-hidden">
@@ -43,7 +132,7 @@ export function RacePageContent() {
     )
   }
 
-  const { dataFreshness } = raceData
+  const { dataFreshness: contextDataFreshness } = raceData
 
   // Use real-time data from unified subscription
   const currentRace = realtimeData.race || raceData.race
@@ -94,7 +183,7 @@ export function RacePageContent() {
   return (
     <div className="race-page-layout">
       {/* Loading Overlay */}
-      {isLoading && (
+      {(isLoading || realtimeData.isLoading) && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 flex items-center space-x-3">
             <svg
@@ -131,6 +220,7 @@ export function RacePageContent() {
           meeting={currentMeeting}
           navigationData={realtimeData.navigationData}
           connectionHealth={realtimeData.getConnectionHealth()}
+          pollingInfo={pollingInfo}
           onConfigureAlerts={() => setIsAlertsModalOpen(true)}
           onToggleConnectionMonitor={() => setShowConnectionMonitor(!showConnectionMonitor)}
           showConnectionMonitor={showConnectionMonitor}
@@ -145,7 +235,7 @@ export function RacePageContent() {
       />
 
       {/* Error Message */}
-      {error && (
+      {(error || realtimeData.error) && (
         <div className="race-layout-error">
           <div className="bg-red-50 border border-red-200 rounded-md p-4">
             <div className="flex">
@@ -167,7 +257,7 @@ export function RacePageContent() {
                   Error loading race data
                 </h3>
                 <div className="mt-2 text-sm text-red-700">
-                  <p>{error}</p>
+                  <p>{error ?? realtimeData.error?.message}</p>
                 </div>
               </div>
             </div>
@@ -181,7 +271,7 @@ export function RacePageContent() {
           initialEntrants={currentEntrants}
           raceId={currentRace.$id}
           raceStartTime={currentRace.startTime}
-          dataFreshness={dataFreshness}
+          dataFreshness={contextDataFreshness}
           enableMoneyFlowTimeline={true}
           enableJockeySilks={true}
           className="h-full"
@@ -212,6 +302,7 @@ export function RacePageContent() {
           lastResultsUpdate={realtimeData.lastResultsUpdate}
           connectionHealth={realtimeData.getConnectionHealth()}
           race={currentRace}
+          pollingInfo={pollingInfo}
         />
       </footer>
 

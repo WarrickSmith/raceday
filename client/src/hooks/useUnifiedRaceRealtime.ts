@@ -28,7 +28,11 @@ interface UseUnifiedRaceRealtimeProps {
   cleanupSignal?: number
 }
 
-type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'disconnecting'
+export type ConnectionState =
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+  | 'disconnecting'
 
 interface UnifiedRaceRealtimeState {
   race: Race | null
