@@ -345,10 +345,19 @@ export function useUnifiedRaceRealtime({
   } = polling
 
   const refetch = useCallback(async () => {
+    if (!isMountedRef.current) {
+      return
+    }
+
     setIsLoading(true)
     try {
       await forceUpdate()
     } catch (refetchError) {
+      // Only update state if we're still mounted
+      if (!isMountedRef.current) {
+        return
+      }
+
       const normalized =
         refetchError instanceof Error
           ? refetchError
@@ -365,22 +374,31 @@ export function useUnifiedRaceRealtime({
 
       throw normalized
     } finally {
-      setIsLoading(false)
+      if (isMountedRef.current) {
+        setIsLoading(false)
+      }
     }
   }, [forceUpdate])
 
   const reconnect = useCallback(() => {
-    stopPolling()
-    setState((prev) => ({
-      ...prev,
-      connectionState: 'connecting',
-      isConnected: false,
-    }))
+    if (!isMountedRef.current) {
+      return
+    }
 
-    startPolling()
-    pollingStartTime.current = Date.now()
-    lastUpdateRef.current = null
-    latencySamples.current = []
+    stopPolling()
+
+    if (isMountedRef.current) {
+      setState((prev) => ({
+        ...prev,
+        connectionState: 'connecting',
+        isConnected: false,
+      }))
+
+      startPolling()
+      pollingStartTime.current = Date.now()
+      lastUpdateRef.current = null
+      latencySamples.current = []
+    }
   }, [startPolling, stopPolling])
 
   const clearHistory = useCallback(() => {
@@ -389,16 +407,18 @@ export function useUnifiedRaceRealtime({
     pollingStartTime.current = Date.now()
     lastUpdateRef.current = null
 
-    setState((prev) => ({
-      ...prev,
-      totalUpdates: 0,
-      lastUpdate: null,
-      updateLatency: 0,
-    }))
+    if (isMountedRef.current) {
+      setState((prev) => ({
+        ...prev,
+        totalUpdates: 0,
+        lastUpdate: null,
+        updateLatency: 0,
+      }))
+    }
   }, [])
 
   useEffect(() => {
-    if (errorState.lastError) {
+    if (errorState.lastError && isMountedRef.current) {
       totalErrorsRef.current = errorState.retryAttempt
       setError(errorState.lastError)
       setState((prev) => ({
@@ -482,14 +502,44 @@ export function useUnifiedRaceRealtime({
     lastUpdateRef.current = initialRaceUpdate?.getTime() ?? null
   }, [initialEntrants, initialMeeting, initialNavigationData, initialRace, raceId])
 
+  // Ref to track mounting state to prevent updates after unmount
+  const isMountedRef = useRef(true)
+
   useEffect(() => {
-    if (!cleanupSignal) {
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!cleanupSignal || !isMountedRef.current) {
       return
     }
 
+    // Clear history without triggering refetch to prevent infinite loops
     clearHistory()
-    void refetch()
-  }, [cleanupSignal, clearHistory, refetch])
+
+    // Only refetch if we're still mounted and not in the middle of navigation
+    const safeRefetch = async () => {
+      if (isMountedRef.current) {
+        try {
+          await forceUpdate()
+        } catch (error) {
+          // Ignore errors during cleanup phase
+          if (isMountedRef.current) {
+            console.warn('Cleanup refetch failed:', error)
+          }
+        }
+      }
+    }
+
+    // Use a small delay to allow navigation to settle
+    const timeoutId = setTimeout(safeRefetch, 100)
+
+    return () => {
+      clearTimeout(timeoutId)
+    }
+  }, [cleanupSignal, clearHistory, forceUpdate])
 
   const getConnectionHealth = useCallback(() => {
     const samples = latencySamples.current

@@ -232,7 +232,7 @@ export function useCoordinatedRacePolling(
           raceId,
           currentCached?.race || null,
           currentCached?.entrants || [],
-          (data as { pools: RacePoolData }).pools,
+          data as RacePoolData,
           currentCached?.moneyFlowUpdateTrigger || 0
         )
         break
@@ -273,8 +273,34 @@ export function useCoordinatedRacePolling(
       const abortController = new AbortController()
       abortControllersRef.current.set(source, abortController)
 
+      // Build URL with required parameters for money-flow endpoint
+      let requestUrl = `/api/race/${raceId}${endpoint}`
+
+      // Money flow endpoint requires entrants parameter
+      if (source === 'money-flow' && endpoint.includes('money-flow-timeline')) {
+        // Get current entrants from data or cache
+        const currentEntrants = data.entrants?.length > 0
+          ? data.entrants
+          : raceDataCache.getRaceData(raceId)?.entrants || []
+
+        if (currentEntrants.length > 0) {
+          const entrantIds = currentEntrants.map(e => e.entrantId || e.$id).filter(Boolean)
+          if (entrantIds.length > 0) {
+            const entrantsParam = entrantIds.join(',')
+            requestUrl += `?entrants=${encodeURIComponent(entrantsParam)}`
+            logger.debug(`${source} request with ${entrantIds.length} entrants`)
+          } else {
+            logger.warn(`${source} request skipped - no valid entrant IDs found`)
+            return null
+          }
+        } else {
+          logger.warn(`${source} request skipped - no entrants available`)
+          return null
+        }
+      }
+
       // Fetch with caching headers for optimization
-      const response = await fetch(`/api/race/${raceId}${endpoint}`, {
+      const response = await fetch(requestUrl, {
         signal: abortController.signal,
         cache: 'no-cache',
         headers: {
@@ -322,14 +348,24 @@ export function useCoordinatedRacePolling(
     } catch (error) {
       const fetchError = error instanceof Error ? error : new Error(`Unknown error in ${source}`)
 
-      // Update error tracking
+      // Classify error types to handle abort signals appropriately
+      const isAbortError = fetchError.name === 'AbortError' || fetchError.message.includes('aborted')
+      const isIntentionalAbort = abortControllersRef.current.has(source) && isAbortError
+
+      // Don't log or track intentional aborts as errors
+      if (isIntentionalAbort) {
+        logger.debug(`${source} request intentionally aborted during cleanup`)
+        return null
+      }
+
+      // Update error tracking for genuine errors
       setCoordinationState(prev => ({
         ...prev,
         failedSources: new Set([...prev.failedSources, source]),
         successfulSources: new Set([...prev.successfulSources].filter(s => s !== source))
       }))
 
-      // Update error state
+      // Update error state with enhanced classification
       setErrorState(prev => ({
         ...prev,
         [source]: {
@@ -340,14 +376,24 @@ export function useCoordinatedRacePolling(
         }
       }))
 
-      logger.error(`${source} fetch failed`, { error: fetchError.message })
+      // Enhanced error logging with context
+      if (isAbortError) {
+        logger.warn(`${source} fetch aborted unexpectedly`, {
+          error: fetchError.message,
+          hasAbortController: abortControllersRef.current.has(source)
+        })
+      } else {
+        logger.error(`${source} fetch failed`, { error: fetchError.message })
+      }
 
-      // Try to use fallback data
-      const fallbackData = getCachedData(source, raceId)
-      if (fallbackData) {
-        logger.debug(`Using fallback data for ${source}`)
-        setDataFreshness('stale')
-        return fallbackData
+      // Try to use fallback data for non-abort errors
+      if (!isAbortError) {
+        const fallbackData = getCachedData(source, raceId)
+        if (fallbackData) {
+          logger.debug(`Using fallback data for ${source}`)
+          setDataFreshness('stale')
+          return fallbackData
+        }
       }
 
       throw fetchError
@@ -362,7 +408,7 @@ export function useCoordinatedRacePolling(
       // Clean up abort controller
       abortControllersRef.current.delete(source)
     }
-  }, [config, coordinationState.requestsInFlight, getCachedData, cacheResponseData, getCachedHeaders, logger])
+  }, [config, coordinationState.requestsInFlight, data.entrants, getCachedData, cacheResponseData, getCachedHeaders, logger])
 
   /**
    * Execute coordinated polling cycle for all data sources
@@ -378,12 +424,16 @@ export function useCoordinatedRacePolling(
     })
 
     try {
-      // Coordinated API calls with staggered timing (100-200ms delays)
-      const [raceResult, entrantsResult, poolsResult, moneyFlowResult] = await Promise.allSettled([
+      // Phase 1: Fetch core race and entrants data first (they're dependencies for money-flow)
+      const [raceResult, entrantsResult] = await Promise.allSettled([
         fetchDataSource('race', '', 0),           // Immediate
         fetchDataSource('entrants', '/entrants', 100),     // 100ms delay
+      ])
+
+      // Phase 2: Fetch pools and money-flow after core data is available
+      const [poolsResult, moneyFlowResult] = await Promise.allSettled([
         fetchDataSource('pools', '/pools', 200),           // 200ms delay
-        fetchDataSource('money-flow', '/money-flow-timeline', 300) // 300ms delay
+        fetchDataSource('money-flow', '/money-flow-timeline', 300) // 300ms delay - requires entrants
       ])
 
       // Process results and maintain data consistency
@@ -408,11 +458,11 @@ export function useCoordinatedRacePolling(
         }
       }
 
-      // Process pools data
+      // Process pools data - API returns RacePoolData directly, not wrapped
       if (poolsResult.status === 'fulfilled' && poolsResult.value) {
-        const poolsData = poolsResult.value as { pools: RacePoolData }
-        if (poolsData.pools) {
-          newData.pools = poolsData.pools
+        const poolsData = poolsResult.value as RacePoolData
+        if (poolsData) {
+          newData.pools = poolsData
           hasUpdates = true
         }
       }
@@ -447,21 +497,47 @@ export function useCoordinatedRacePolling(
         }
       }
 
-      // Handle errors from any source
-      const errors = [raceResult, entrantsResult, poolsResult, moneyFlowResult]
+      // Handle errors from any source with enhanced classification
+      const allResults = [raceResult, entrantsResult, poolsResult, moneyFlowResult]
+      const errors = allResults
         .filter(result => result.status === 'rejected')
         .map(result => (result as PromiseRejectedResult).reason)
 
-      if (errors.length > 0) {
-        const combinedError = new Error(`Polling failed for ${errors.length} sources: ${errors.map(e => e.message).join(', ')}`)
+      // Classify errors by type for better reporting
+      const criticalErrors = []
+      const nonCriticalErrors = []
+
+      if (raceResult.status === 'rejected') criticalErrors.push('race data')
+      if (entrantsResult.status === 'rejected') criticalErrors.push('entrants data')
+      if (poolsResult.status === 'rejected') nonCriticalErrors.push('pools data')
+      if (moneyFlowResult.status === 'rejected') nonCriticalErrors.push('money-flow data')
+
+      // Only report errors that aren't intentional aborts
+      const reportableErrors = errors.filter(e =>
+        !(e instanceof Error && (e.name === 'AbortError' || e.message.includes('aborted')))
+      )
+
+      if (reportableErrors.length > 0) {
+        const errorDetails = {
+          critical: criticalErrors,
+          nonCritical: nonCriticalErrors,
+          total: reportableErrors.length
+        }
+
+        const combinedError = new Error(
+          `Polling failed for ${reportableErrors.length} sources: ${reportableErrors.map(e => e.message).join(', ')}`
+        )
 
         if (config.onError) {
           config.onError(combinedError)
         }
 
-        // Throw error if ALL sources failed, so forceUpdate can catch it
-        if (errors.length === 4) {
+        // Only throw if critical data sources (race, entrants) failed
+        if (criticalErrors.length > 0) {
+          logger.error('Critical polling sources failed', errorDetails)
           throw combinedError
+        } else {
+          logger.warn('Non-critical polling sources failed', errorDetails)
         }
       }
 
