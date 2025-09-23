@@ -17,12 +17,34 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    const { id: raceId } = await params
+  let raceId: string | undefined
 
-    if (!raceId) {
+  try {
+    const { id } = await params
+    raceId = id
+
+    // Validate environment variables first
+    const endpoint = process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT
+    const projectId = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID
+    const apiKey = process.env.APPWRITE_API_KEY
+
+    if (!endpoint || !projectId || !apiKey) {
+      console.error('Race API Error: Missing Appwrite environment variables', {
+        hasEndpoint: !!endpoint,
+        hasProjectId: !!projectId,
+        hasApiKey: !!apiKey,
+        raceId
+      })
       return NextResponse.json(
-        { error: 'Race ID is required' },
+        { error: 'Server configuration error' },
+        { status: 500 }
+      )
+    }
+
+    if (!raceId || typeof raceId !== 'string' || raceId.trim() === '') {
+      console.warn('Race API Warning: Invalid race ID provided', { raceId })
+      return NextResponse.json(
+        { error: 'Race ID is required and must be a valid string' },
         { status: 400 }
       )
     }
@@ -31,13 +53,28 @@ export async function GET(
     const url = new URL(request.url)
     const isNavigation = url.searchParams.get('nav') === 'true'
 
+    console.log('Race API Request:', {
+      raceId,
+      isNavigation,
+      timestamp: new Date().toISOString()
+    })
+
     const raceData = isNavigation
       ? await getNavigationRaceData(raceId)
       : await getComprehensiveRaceData(raceId)
 
     if (!raceData) {
+      console.warn('Race API Warning: Race not found', { raceId, isNavigation })
       return NextResponse.json({ error: 'Race not found' }, { status: 404 })
     }
+
+    console.log('Race API Success:', {
+      raceId,
+      isNavigation,
+      hasRace: !!raceData.race,
+      hasEntrants: !!raceData.entrants?.length,
+      timestamp: new Date().toISOString()
+    })
 
     // Set cache headers based on mode
     const response = NextResponse.json(raceData)
@@ -64,9 +101,19 @@ export async function GET(
     response.headers.set('X-Race-ID', raceId)
 
     return response
-  } catch {
+  } catch (error) {
+    console.error('Race API Error:', {
+      raceId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      timestamp: new Date().toISOString()
+    })
+
     return NextResponse.json(
-      { error: 'Internal server error' },
+      {
+        error: 'Internal server error',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     )
   }
@@ -399,7 +446,12 @@ async function getComprehensiveRaceData(raceId: string): Promise<{
       dataFreshness,
     }
   } catch (error) {
-    console.error('Error fetching race details:', error)
+    console.error('Error fetching comprehensive race data:', {
+      raceId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      timestamp: new Date().toISOString()
+    })
     return null
   }
 }
@@ -623,7 +675,12 @@ async function getNavigationRaceData(raceId: string): Promise<{
       dataFreshness,
     }
   } catch (error) {
-    console.error('Error fetching navigation race data:', error)
+    console.error('Error fetching navigation race data:', {
+      raceId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      timestamp: new Date().toISOString()
+    })
     return null
   }
 }
