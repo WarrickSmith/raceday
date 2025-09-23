@@ -602,7 +602,37 @@ export function useMoneyFlowTimeline(
       return
     }
 
-    // Start polling if we have the required data
+    // COORDINATION MODE: Only disable independent polling if coordinated polling is actively working
+    // Check if updateTrigger is being actively updated (not just provided as a parameter)
+    const hasActiveCoordination = typeof updateTrigger === 'number' && updateTrigger > 0
+    const coordinationRecentlyActive = hasActiveCoordination &&
+      (lastUpdate && Date.now() - lastUpdate.getTime() < 60000) // Updated within last minute
+
+    if (hasActiveCoordination && coordinationRecentlyActive) {
+      // Stop independent polling only when coordination is actively working
+      stopPolling()
+
+      loggerRef.current.debug('Money flow timeline operating in coordinated mode', {
+        raceId,
+        updateTrigger,
+        lastUpdate: lastUpdate?.toISOString(),
+        coordinationActive: true
+      })
+      return
+    }
+
+    // Log when coordination is not active to help debug
+    if (typeof updateTrigger === 'number') {
+      loggerRef.current.debug('Money flow timeline coordination inactive, using independent mode', {
+        raceId,
+        updateTrigger,
+        hasActiveCoordination,
+        coordinationRecentlyActive,
+        lastUpdate: lastUpdate?.toISOString()
+      })
+    }
+
+    // INDEPENDENT MODE: Start polling if we have the required data and no coordinated polling
     if (raceStartTime && raceStatus) {
       startPolling()
     } else {
@@ -615,13 +645,14 @@ export function useMoneyFlowTimeline(
       entrantIds: entrantIds.length,
       hasStartTime: Boolean(raceStartTime),
       raceStatus,
-      isRaceComplete
+      isRaceComplete,
+      mode: 'independent'
     })
 
     return () => {
       stopPolling()
     }
-  }, [raceId, entrantIds, entrantKey, raceStatus, raceStartTime, startPolling, stopPolling, fetchTimelineData, timelineData.size])
+  }, [raceId, entrantIds, entrantKey, raceStatus, raceStartTime, startPolling, stopPolling, fetchTimelineData, timelineData.size, updateTrigger])
 
   const refetch = useCallback(async () => {
     await fetchTimelineData()

@@ -261,11 +261,25 @@ export function useRacePolling(config: PollingConfig): UseRacePollingResult {
   // Auto-start polling if initial data is available
   const hasStartedRef = useRef(false)
   useEffect(() => {
-    if (config.initialData?.race && !pollingState.isActive && !pollingState.isStopped && !hasStartedRef.current) {
+    logger.debug('Auto-start polling effect triggered', {
+      raceId: config.raceId,
+      hasRace: !!config.initialData?.race,
+      isActive: coordinatorState.isActive,
+      isStopped: coordinatorState.isStopped,
+      hasStarted: hasStartedRef.current,
+      willStart: !!(config.initialData?.race && !coordinatorState.isActive && !coordinatorState.isStopped && !hasStartedRef.current)
+    })
+
+    if (config.initialData?.race && !coordinatorState.isActive && !coordinatorState.isStopped && !hasStartedRef.current) {
       hasStartedRef.current = true
+      logger.info('Auto-starting coordinated polling with initial data', {
+        raceId: config.raceId,
+        hasRace: !!config.initialData?.race,
+        raceStatus: config.raceStatus
+      })
       startPolling()
     }
-  }, [config.initialData?.race, pollingState.isActive, pollingState.isStopped, startPolling])
+  }, [config.initialData?.race, coordinatorState.isActive, coordinatorState.isStopped, startPolling, config.raceId, config.raceStatus, logger])
 
   /**
    * Get fallback data from cache (Task 3)

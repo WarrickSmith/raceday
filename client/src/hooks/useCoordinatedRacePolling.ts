@@ -38,7 +38,7 @@ import {
 const REQUEST_RATE_LIMIT_WINDOW_MS = 60_000
 const MAX_REQUESTS_PER_WINDOW = 24
 const DEFAULT_CIRCUIT_BREAKER_THRESHOLD = 5
-const DEFAULT_REQUEST_TIMEOUT_MS = 10_000
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
 const CIRCUIT_BREAKER_RESET_MS = 60_000
 const SLOW_RESPONSE_THRESHOLD_MS = 2_500
 const MAX_LATENCY_SAMPLES = 5
@@ -305,12 +305,14 @@ export function useCoordinatedRacePolling(
         )
         break
       case 'moneyFlow':
+        // Increment money flow update trigger when money flow data is successfully fetched
+        const newMoneyFlowTrigger = (currentCached?.moneyFlowUpdateTrigger || 0) + 1
         raceDataCache.setRaceData(
           raceId,
           currentCached?.race || null,
           currentCached?.entrants || [],
           currentCached?.pools || null,
-          currentCached?.moneyFlowUpdateTrigger || 0
+          newMoneyFlowTrigger
         )
         break
     }
@@ -356,6 +358,42 @@ export function useCoordinatedRacePolling(
     })
     return slowest
   }, [])
+
+  /**
+   * Validate that all expected endpoints are being polled
+   */
+  const validatePollingCoverage = useCallback((endpointResults: Record<string, 'fulfilled' | 'rejected'>) => {
+    const expectedEndpoints = ['race', 'entrants', 'pools', 'moneyFlow']
+    const missingEndpoints = expectedEndpoints.filter(endpoint => !endpointResults[endpoint])
+
+    if (missingEndpoints.length > 0) {
+      logger.warn('Polling validation failed - missing endpoints', {
+        raceId: config.raceId,
+        missing: missingEndpoints,
+        attempted: Object.keys(endpointResults)
+      })
+
+      // Record as polling issue for monitoring
+      recordPollingError({
+        raceId: config.raceId,
+        endpoint: 'race',
+        error: new Error(`Missing endpoints in polling cycle: ${missingEndpoints.join(', ')}`)
+      })
+    }
+
+    // Track endpoint consistency
+    const attemptedCount = Object.keys(endpointResults).length
+    if (attemptedCount !== expectedEndpoints.length) {
+      logger.warn('Polling validation - inconsistent endpoint count', {
+        raceId: config.raceId,
+        expected: expectedEndpoints.length,
+        attempted: attemptedCount,
+        endpoints: endpointResults
+      })
+    }
+
+    return missingEndpoints.length === 0
+  }, [config.raceId, logger])
 
   /**
    * Fetch data from a specific source with error handling
@@ -404,6 +442,8 @@ export function useCoordinatedRacePolling(
       }))
 
       let timeoutId: ReturnType<typeof setTimeout> | undefined
+      // Track if this abort was intentional (cleanup or timeout)
+      let intentionalAbort = false
 
       try {
         if (delay > 0) {
@@ -419,12 +459,52 @@ export function useCoordinatedRacePolling(
 
           if (currentEntrants.length === 0) {
             logger.warn(`${source} request skipped - no entrants available`)
+            // Record as successful but with no data since this is intentional
+            recordPollingSuccess({ raceId, endpoint: source, durationMs: 0 })
+
+            // Update coordination state to mark as successful
+            setCoordinationState(prev => ({
+              ...prev,
+              successfulSources: new Set([...prev.successfulSources, source]),
+              failedSources: new Set([...prev.failedSources].filter(s => s !== source))
+            }))
+
+            setErrorState(prev => ({
+              ...prev,
+              [source]: {
+                lastError: null,
+                errorCount: 0,
+                lastSuccessTime: new Date(),
+                canUseFallback: true
+              }
+            }))
+
             return null
           }
 
           const entrantIds = currentEntrants.map(entrant => entrant.entrantId || entrant.$id).filter(Boolean)
           if (entrantIds.length === 0) {
             logger.warn(`${source} request skipped - no valid entrant IDs found`)
+            // Record as successful but with no data since this is intentional
+            recordPollingSuccess({ raceId, endpoint: source, durationMs: 0 })
+
+            // Update coordination state to mark as successful
+            setCoordinationState(prev => ({
+              ...prev,
+              successfulSources: new Set([...prev.successfulSources, source]),
+              failedSources: new Set([...prev.failedSources].filter(s => s !== source))
+            }))
+
+            setErrorState(prev => ({
+              ...prev,
+              [source]: {
+                lastError: null,
+                errorCount: 0,
+                lastSuccessTime: new Date(),
+                canUseFallback: true
+              }
+            }))
+
             return null
           }
 
@@ -438,6 +518,7 @@ export function useCoordinatedRacePolling(
 
         const timeoutMs = config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
         timeoutId = setTimeout(() => {
+          intentionalAbort = true
           abortController.abort()
         }, timeoutMs)
 
@@ -521,13 +602,20 @@ export function useCoordinatedRacePolling(
       } catch (error) {
         const fetchError = error instanceof Error ? error : new Error(`Unknown error in ${source}`)
         const isAbortError = fetchError.name === 'AbortError' || fetchError.message.includes('aborted')
-        const isIntentionalAbort = abortControllersRef.current.has(source) && isAbortError
 
-        if (isIntentionalAbort) {
-          logger.debug(`${source} request intentionally aborted during cleanup`)
+        // Check if this was an intentional abort (timeout or cleanup)
+        if (isAbortError && intentionalAbort) {
+          logger.debug(`${source} request intentionally aborted (timeout or cleanup)`)
           return null
         }
 
+        // Check if this was a cleanup abort (component unmounting)
+        if (isAbortError && !mountedRef.current) {
+          logger.debug(`${source} request aborted during component cleanup`)
+          return null
+        }
+
+        // This is an unexpected abort or other error - treat as failure
         recordPollingError({ raceId, endpoint: source, error: fetchError })
 
         setCoordinationState(prev => ({
@@ -559,6 +647,8 @@ export function useCoordinatedRacePolling(
         if (isAbortError) {
           logger.warn(`${source} fetch aborted unexpectedly`, {
             error: fetchError.message,
+            intentionalAbort,
+            isMounted: mountedRef.current,
             hasAbortController: abortControllersRef.current.has(source)
           })
         } else {
@@ -627,17 +717,17 @@ export function useCoordinatedRacePolling(
     recordPollingCycleStart({ raceId: config.raceId })
 
     try {
-      // Phase 1: Fetch core race and entrants data first (they're dependencies for money-flow)
-      const [raceResult, entrantsResult] = await Promise.allSettled([
-        fetchDataSource('race', '', 0),           // Immediate
-        fetchDataSource('entrants', '/entrants', 100),     // 100ms delay
-      ])
+      // Single coordinated cycle: All endpoints are attempted with staggered timing
+      // This ensures all data sources are polled in every cycle regardless of individual failures
+      const allRequests = [
+        fetchDataSource('race', '', 0),                                     // Immediate
+        fetchDataSource('entrants', '/entrants', 100),                     // 100ms delay
+        fetchDataSource('pools', '/pools', 200),                           // 200ms delay
+        fetchDataSource('moneyFlow', '/money-flow-timeline', 300)          // 300ms delay - requires entrants
+      ]
 
-      // Phase 2: Fetch pools and money-flow after core data is available
-      const [poolsResult, moneyFlowResult] = await Promise.allSettled([
-        fetchDataSource('pools', '/pools', 200),           // 200ms delay
-        fetchDataSource('moneyFlow', '/money-flow-timeline', 300) // 300ms delay - requires entrants
-      ])
+      // Wait for all requests to complete (fulfilled or rejected)
+      const [raceResult, entrantsResult, poolsResult, moneyFlowResult] = await Promise.allSettled(allRequests)
 
       // Process results and maintain data consistency
       const newData: RaceDataSources = { ...data }
@@ -685,6 +775,10 @@ export function useCoordinatedRacePolling(
         lastPollDataRef.current = newData
         setDataFreshness('fresh')
 
+        // Get current money flow trigger from cache (updated during caching if money flow was fetched)
+        const currentCached = raceDataCache.getRaceData(config.raceId)
+        const moneyFlowTrigger = currentCached?.moneyFlowUpdateTrigger || 0
+
         // Increment update trigger
         const newTrigger = coordinationState.updateTrigger + 1
         setCoordinationState(prev => ({
@@ -694,9 +788,9 @@ export function useCoordinatedRacePolling(
           updateTrigger: newTrigger
         }))
 
-        // Notify parent component
+        // Notify parent component with both general and money flow specific triggers
         if (config.onDataUpdate) {
-          config.onDataUpdate({ ...newData, updateTrigger: newTrigger })
+          config.onDataUpdate({ ...newData, updateTrigger: moneyFlowTrigger })
         }
       }
 
@@ -706,13 +800,27 @@ export function useCoordinatedRacePolling(
         .filter(result => result.status === 'rejected')
         .map(result => (result as PromiseRejectedResult).reason)
 
-      // Classify errors by type for better reporting
+      // Determine if we're in an active racing period that requires all data
+      const timeToStart = calculateTimeToStart(config.raceStartTime)
+      const raceStatus = config.raceStatus.toLowerCase()
+      const isActiveRacePeriod = timeToStart <= 20 || ['closed', 'running', 'interim'].includes(raceStatus)
+
+      // Classify errors by type - pools become critical during active race periods
       const criticalErrors = []
       const nonCriticalErrors = []
 
       if (raceResult.status === 'rejected') criticalErrors.push('race data')
       if (entrantsResult.status === 'rejected') criticalErrors.push('entrants data')
-      if (poolsResult.status === 'rejected') nonCriticalErrors.push('pools data')
+
+      // Pools are critical during active race periods for status updates
+      if (poolsResult.status === 'rejected') {
+        if (isActiveRacePeriod) {
+          criticalErrors.push('pools data')
+        } else {
+          nonCriticalErrors.push('pools data')
+        }
+      }
+
       if (moneyFlowResult.status === 'rejected') nonCriticalErrors.push('money flow data')
 
       // Only report errors that aren't intentional aborts
@@ -724,7 +832,9 @@ export function useCoordinatedRacePolling(
         const errorDetails = {
           critical: criticalErrors,
           nonCritical: nonCriticalErrors,
-          total: reportableErrors.length
+          total: reportableErrors.length,
+          isActiveRacePeriod,
+          timeToStart: Math.round(timeToStart * 100) / 100
         }
 
         const combinedError = new Error(
@@ -735,7 +845,7 @@ export function useCoordinatedRacePolling(
           config.onError(combinedError)
         }
 
-        // Only throw if critical data sources (race, entrants) failed
+        // Only throw if critical data sources failed
         if (criticalErrors.length > 0) {
           logger.error('Critical polling sources failed', errorDetails)
           throw combinedError
@@ -743,6 +853,25 @@ export function useCoordinatedRacePolling(
           logger.warn('Non-critical polling sources failed', errorDetails)
         }
       }
+
+      // Validate polling coverage
+      const endpointStatus = {
+        race: raceResult.status,
+        entrants: entrantsResult.status,
+        pools: poolsResult.status,
+        moneyFlow: moneyFlowResult.status
+      }
+
+      validatePollingCoverage(endpointStatus)
+
+      // Log successful polling cycle with endpoint status
+      logger.debug('Coordinated polling cycle completed', {
+        raceId: config.raceId,
+        hasUpdates,
+        endpointStatus,
+        isActiveRacePeriod,
+        timeToStart: Math.round(timeToStart * 100) / 100
+      })
 
     } catch (error) {
       const pollingError = error instanceof Error ? error : new Error('Unknown polling error')
@@ -759,7 +888,9 @@ export function useCoordinatedRacePolling(
     coordinationState,
     data,
     fetchDataSource,
-    logger
+    logger,
+    calculateTimeToStart,
+    validatePollingCoverage
   ])
 
   /**
@@ -987,8 +1118,14 @@ export function useCoordinatedRacePolling(
       pollTimeoutRef.current = null
     }
 
-    // Cancel all ongoing requests
-    abortControllersRef.current.forEach(controller => controller.abort())
+    // Cancel all ongoing requests (these are intentional cleanup aborts)
+    abortControllersRef.current.forEach(controller => {
+      try {
+        controller.abort()
+      } catch {
+        // Ignore abort errors during cleanup
+      }
+    })
     abortControllersRef.current.clear()
   }, [config.raceId, coordinationState.totalPolls, logger])
 
@@ -1043,8 +1180,14 @@ export function useCoordinatedRacePolling(
         clearTimeout(pollTimeoutRefCurrent.current)
       }
 
-      // Use captured reference to avoid stale closure
-      abortControllersRefCurrent.current.forEach(controller => controller.abort())
+      // Use captured reference to avoid stale closure (intentional cleanup aborts)
+      abortControllersRefCurrent.current.forEach(controller => {
+        try {
+          controller.abort()
+        } catch {
+          // Ignore abort errors during cleanup
+        }
+      })
       abortControllersRefCurrent.current.clear()
 
       markPollingActive(false)
