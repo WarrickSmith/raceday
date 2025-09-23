@@ -26,40 +26,100 @@ interface NextScheduledRaceApiResponse {
 export function NextScheduledRaceButton({ meetings, isRealtimeConnected, raceUpdateSignal }: NextScheduledRaceButtonProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
-  const [nextScheduledRace, setNextScheduledRace] = useState<NextScheduledRace | null>(null);
+  const [nextScheduledRace, setNextScheduledRaceState] = useState<NextScheduledRace | null>(null);
+  const nextScheduledRaceRef = useRef<NextScheduledRace | null>(null);
+  const isComponentActiveRef = useRef(true);
+  const hasInitializedRef = useRef(false);
   const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { requestCleanup } = useSubscriptionCleanup();
+
+  const updateNextScheduledRace = useCallback((valueOrUpdater: NextScheduledRace | null | ((prev: NextScheduledRace | null) => NextScheduledRace | null)) => {
+    if (!isComponentActiveRef.current) {
+      return;
+    }
+
+    setNextScheduledRaceState((prev) => {
+      const next =
+        typeof valueOrUpdater === 'function'
+          ? (valueOrUpdater as (prev: NextScheduledRace | null) => NextScheduledRace | null)(prev)
+          : valueOrUpdater;
+
+      const normalizedNext = next ?? null;
+
+      if (
+        prev?.raceId === normalizedNext?.raceId &&
+        prev?.startTime === normalizedNext?.startTime &&
+        prev?.name === normalizedNext?.name &&
+        prev?.meetingName === normalizedNext?.meetingName &&
+        prev?.raceNumber === normalizedNext?.raceNumber
+      ) {
+        nextScheduledRaceRef.current = prev;
+        return prev;
+      }
+
+      nextScheduledRaceRef.current = normalizedNext;
+      return normalizedNext;
+    });
+  }, []);
 
   // Fetch the next scheduled race from the API
   const fetchNextScheduledRace = useCallback(async () => {
     try {
       const response = await fetch('/api/next-scheduled-race');
-      if (response.ok) {
-        const data: NextScheduledRaceApiResponse = await response.json();
-        setNextScheduledRace(data.nextScheduledRace);
-      } else {
-        setNextScheduledRace(null);
+      if (!response.ok) {
+        if (nextScheduledRaceRef.current !== null) {
+          updateNextScheduledRace(null);
+        }
+        return;
       }
+
+      const data: NextScheduledRaceApiResponse = await response.json();
+      const incomingRace = data.nextScheduledRace ?? null;
+
+      if (!isComponentActiveRef.current) {
+        return;
+      }
+
+      const currentRace = nextScheduledRaceRef.current;
+
+      if (
+        currentRace?.raceId === incomingRace?.raceId &&
+        currentRace?.startTime === incomingRace?.startTime &&
+        currentRace?.name === incomingRace?.name &&
+        currentRace?.meetingName === incomingRace?.meetingName &&
+        currentRace?.raceNumber === incomingRace?.raceNumber
+      ) {
+        return;
+      }
+
+      updateNextScheduledRace(incomingRace);
     } catch (error) {
       console.error('Failed to fetch next scheduled race:', error);
-      setNextScheduledRace(null);
+      if (nextScheduledRaceRef.current !== null) {
+        updateNextScheduledRace(null);
+      }
     }
-  }, []);
+  }, [updateNextScheduledRace]);
 
   // Setup intelligent polling based on race timing
   const setupIntelligentPolling = useCallback(() => {
+    if (!isComponentActiveRef.current) {
+      return;
+    }
+
     if (fetchTimeoutRef.current) {
       clearTimeout(fetchTimeoutRef.current);
     }
 
     let pollInterval = 60000; // Default 1 minute
-    
-    if (nextScheduledRace) {
+    const currentRace = nextScheduledRaceRef.current;
+
+    if (currentRace) {
       const now = new Date();
-      const raceTime = new Date(nextScheduledRace.startTime);
+      const raceTime = new Date(currentRace.startTime);
       const minutesUntilRace = (raceTime.getTime() - now.getTime()) / (1000 * 60);
-      
+
       // Increase polling frequency as race approaches
       if (minutesUntilRace <= 1) {
         pollInterval = 10000; // 10 seconds when race is within 1 minute
@@ -71,24 +131,40 @@ export function NextScheduledRaceButton({ meetings, isRealtimeConnected, raceUpd
     }
 
     fetchTimeoutRef.current = setTimeout(() => {
+      if (!isComponentActiveRef.current) {
+        return;
+      }
+
       void fetchNextScheduledRace().then(() => {
-        setupIntelligentPolling(); // Schedule next poll
+        if (isComponentActiveRef.current) {
+          setupIntelligentPolling(); // Schedule next poll
+        }
       });
     }, pollInterval);
-  }, [nextScheduledRace, fetchNextScheduledRace]);
+  }, [fetchNextScheduledRace]);
 
   // Initial fetch and intelligent polling bootstrap
   useEffect(() => {
-    let isActive = true;
+    isComponentActiveRef.current = true;
 
-    void fetchNextScheduledRace().then(() => {
-      if (isActive) {
-        setupIntelligentPolling();
+    const initialize = async () => {
+      await fetchNextScheduledRace();
+
+      if (!isComponentActiveRef.current) {
+        return;
       }
-    });
+
+      hasInitializedRef.current = true;
+      setupIntelligentPolling();
+    };
+
+    void initialize();
 
     return () => {
-      isActive = false;
+      isComponentActiveRef.current = false;
+      hasInitializedRef.current = false;
+      nextScheduledRaceRef.current = null;
+
       if (fetchTimeoutRef.current) {
         clearTimeout(fetchTimeoutRef.current);
         fetchTimeoutRef.current = null;
@@ -102,16 +178,19 @@ export function NextScheduledRaceButton({ meetings, isRealtimeConnected, raceUpd
 
   // Update polling when race changes
   useEffect(() => {
+    if (!hasInitializedRef.current) {
+      return;
+    }
+
     setupIntelligentPolling();
+
     return () => {
       if (fetchTimeoutRef.current) {
         clearTimeout(fetchTimeoutRef.current);
-      }
-      if (debounceTimeoutRef.current) {
-        clearTimeout(debounceTimeoutRef.current);
+        fetchTimeoutRef.current = null;
       }
     };
-  }, [setupIntelligentPolling]);
+  }, [nextScheduledRace?.raceId, nextScheduledRace?.startTime, setupIntelligentPolling]);
 
   // React to shared update signals from meetings polling system
   useEffect(() => {
@@ -124,6 +203,10 @@ export function NextScheduledRaceButton({ meetings, isRealtimeConnected, raceUpd
     }
 
     debounceTimeoutRef.current = setTimeout(() => {
+      if (!isComponentActiveRef.current) {
+        return;
+      }
+
       void fetchNextScheduledRace().finally(() => {
         debounceTimeoutRef.current = null;
       });
@@ -140,9 +223,9 @@ export function NextScheduledRaceButton({ meetings, isRealtimeConnected, raceUpd
   // Reset next race when meetings data clears
   useEffect(() => {
     if (meetings.length === 0) {
-      setNextScheduledRace(null);
+      updateNextScheduledRace(null);
     }
-  }, [meetings.length]);
+  }, [meetings.length, updateNextScheduledRace]);
 
   // Handle countdown updates and race transitions
   useEffect(() => {
