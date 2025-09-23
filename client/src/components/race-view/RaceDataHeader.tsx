@@ -75,7 +75,6 @@ export const RaceDataHeader = memo(function RaceDataHeader({
     return () => clearInterval(timer)
   }, [])
 
-
   const pollingSummary = useMemo(() => {
     if (!pollingInfo) {
       return null
@@ -133,8 +132,10 @@ export const RaceDataHeader = memo(function RaceDataHeader({
         break
       case 'disconnected':
       default:
-        connectionLabel = pollingInfo.retryCount > 0 ? 'Retrying' : 'Disconnected'
-        connectionClass = pollingInfo.retryCount > 0 ? 'text-yellow-600' : 'text-red-600'
+        connectionLabel =
+          pollingInfo.retryCount > 0 ? 'Retrying' : 'Disconnected'
+        connectionClass =
+          pollingInfo.retryCount > 0 ? 'text-yellow-600' : 'text-red-600'
     }
 
     return {
@@ -363,7 +364,7 @@ export const RaceDataHeader = memo(function RaceDataHeader({
             {onConfigureAlerts && (
               <button
                 onClick={onConfigureAlerts}
-                className="text-lg px-2 py-1 rounded transition-colors bg-gray-800 text-white hover:bg-gray-900"
+                className="text-lg px-2 py-1 rounded transition-colors bg-gray-500 text-white hover:bg-gray-900"
                 title="Configure indicators"
                 aria-label="Open indicators configuration"
                 style={{ fontSize: '16px' }}
