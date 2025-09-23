@@ -59,6 +59,9 @@ export function RaceProvider({ children, initialData }: RaceProviderProps) {
   const { signal: subscriptionCleanupSignal, requestCleanup } =
     useSubscriptionCleanup()
 
+  // Request deduplication to prevent multiple simultaneous requests
+  const activeRequestsRef = React.useRef<Map<string, Promise<void>>>(new Map())
+
   // Internal setter for race data (no debug logging in production)
   const setRaceData = useCallback(
     (data: RaceContextData | null) => {
@@ -74,24 +77,42 @@ export function RaceProvider({ children, initialData }: RaceProviderProps) {
     [setRaceData]
   )
 
-  // Simple race data loading function (without navigation complexity)
+  // Simple race data loading function with request deduplication
   const loadRaceData = useCallback(async (raceId: string) => {
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const response = await fetch(`/api/race/${raceId}`)
-      if (!response.ok) {
-        throw new Error(`Failed to fetch race data: ${response.statusText}`)
-      }
-      const newRaceData: RaceContextData = await response.json()
-      setRaceData(newRaceData)
-    } catch (err) {
-      console.error('❌ Error loading race data:', err)
-      setError(err instanceof Error ? err.message : 'Unknown error occurred')
-    } finally {
-      setIsLoading(false)
+    // Check if there's already an active request for this race
+    const activeRequest = activeRequestsRef.current.get(raceId)
+    if (activeRequest) {
+      console.log(`🔄 Joining existing request for race ${raceId}`)
+      return activeRequest
     }
+
+    // Create new request
+    const requestPromise = (async () => {
+      setIsLoading(true)
+      setError(null)
+
+      try {
+        const response = await fetch(`/api/race/${raceId}`)
+        if (!response.ok) {
+          throw new Error(`Failed to fetch race data: ${response.statusText}`)
+        }
+        const newRaceData: RaceContextData = await response.json()
+        setRaceData(newRaceData)
+      } catch (err) {
+        console.error('❌ Error loading race data:', err)
+        setError(err instanceof Error ? err.message : 'Unknown error occurred')
+        throw err // Re-throw so all callers receive the error
+      } finally {
+        setIsLoading(false)
+        // Remove from active requests when done
+        activeRequestsRef.current.delete(raceId)
+      }
+    })()
+
+    // Store the promise so subsequent calls can join it
+    activeRequestsRef.current.set(raceId, requestPromise)
+
+    return requestPromise
   }, [setRaceData])
 
   const invalidateRaceCache = useCallback(
