@@ -271,10 +271,12 @@ export function useCoordinatedRacePolling(
     source: PollingEndpointKey,
     raceId: string,
     data: unknown,
-    metadata?: { etag?: string | null; lastModified?: string | null }
+    metadata?: { etag?: string | null; lastModified?: string | null },
+    options?: { isNotModified?: boolean }
   ): void => {
     // Update race data cache based on source
     const currentCached = raceDataCache.getRaceData(raceId)
+    const isNotModified = options?.isNotModified ?? false
 
     switch (source) {
       case 'race':
@@ -306,7 +308,8 @@ export function useCoordinatedRacePolling(
         break
       case 'moneyFlow':
         // Increment money flow update trigger when money flow data is successfully fetched
-        const newMoneyFlowTrigger = (currentCached?.moneyFlowUpdateTrigger || 0) + 1
+        const moneyFlowBase = currentCached?.moneyFlowUpdateTrigger || 0
+        const newMoneyFlowTrigger = isNotModified ? moneyFlowBase : moneyFlowBase + 1
         raceDataCache.setRaceData(
           raceId,
           currentCached?.race || null,
@@ -540,19 +543,24 @@ export function useCoordinatedRacePolling(
         const durationMs = end - start
         updatePerformanceMetrics(source, durationMs)
 
-        if (!response.ok) {
-          throw new Error(`${source} fetch failed: ${response.statusText}`)
-        }
-
         const etag = response.headers.get('ETag')
         const lastModified = response.headers.get('Last-Modified')
 
         if (response.status === 304) {
           logger.debug(`${source} data not modified, using cached version`)
           const cached = getCachedData(source, raceId)
+
           if (cached) {
-            cacheResponseData(source, raceId, cached, { etag, lastModified })
+            cacheResponseData(
+              source,
+              raceId,
+              cached,
+              { etag, lastModified },
+              { isNotModified: true }
+            )
           }
+
+          recordPollingSuccess({ raceId, endpoint: source, durationMs })
 
           setCoordinationState(prev => ({
             ...prev,
@@ -573,6 +581,10 @@ export function useCoordinatedRacePolling(
           circuitBreakerRef.current.set(requestKey, { open: false, openedAt: null })
           setDataFreshness('fresh')
           return cached
+        }
+
+        if (!response.ok) {
+          throw new Error(`${source} fetch failed: ${response.statusText}`)
         }
 
         const responseData = await response.json()
@@ -990,13 +1002,30 @@ export function useCoordinatedRacePolling(
     }
 
     pollTimeoutRef.current = setTimeout(() => {
-      if (mountedRef.current && !backgroundPauseRef.current) {
-        executeCoordinatedPoll().then(() => {
+      if (!mountedRef.current) {
+        pollTimeoutRef.current = null
+        return
+      }
+
+      if (backgroundPauseRef.current) {
+        logger.debug('Skipping coordinated poll while background paused', {
+          raceId: config.raceId
+        })
+        pollTimeoutRef.current = null
+        return
+      }
+
+      const pollPromise = executeCoordinatedPoll()
+
+      pollPromise
+        .catch(error => {
+          logger.error('Scheduled coordinated poll execution failed', { error })
+        })
+        .finally(() => {
           if (mountedRef.current) {
             scheduleNextPoll()
           }
         })
-      }
     }, intervalWithJitter)
 
     logger.debug('Next coordinated poll scheduled', {
@@ -1041,11 +1070,11 @@ export function useCoordinatedRacePolling(
       isStopped: false
     }))
 
+    scheduleNextPoll()
+
     // Start first poll immediately
-    executeCoordinatedPoll().then(() => {
-      if (mountedRef.current) {
-        scheduleNextPoll()
-      }
+    void executeCoordinatedPoll().catch(error => {
+      logger.error('Initial coordinated poll execution failed', { error })
     })
   }, [config, executeCoordinatedPoll, scheduleNextPoll, logger])
 
