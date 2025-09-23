@@ -5,7 +5,6 @@ import { useRace } from '@/contexts/RaceContext'
 import { formatDistance, formatRaceTime } from '@/utils/raceFormatters'
 import { RaceNavigation } from './RaceNavigation'
 import { getRaceTypeDisplay } from '@/constants/raceTypes'
-import { showDevelopmentFeatures } from '@/utils/environment'
 import type {
   Race,
   Entrant,
@@ -19,6 +18,7 @@ import type {
   ConnectionHealthSnapshot,
   ConnectionState,
 } from '@/hooks/useUnifiedRaceRealtime'
+import { getPollingMetricsSnapshot } from '@/utils/pollingMetrics'
 
 interface RaceDataHeaderProps {
   className?: string
@@ -29,8 +29,6 @@ interface RaceDataHeaderProps {
   connectionHealth?: ConnectionHealthSnapshot
   pollingInfo?: RacePollingHeaderInfo | null
   onConfigureAlerts?: () => void
-  onToggleConnectionMonitor?: () => void
-  showConnectionMonitor?: boolean
 }
 
 interface RacePollingHeaderInfo {
@@ -53,8 +51,6 @@ export const RaceDataHeader = memo(function RaceDataHeader({
   connectionHealth,
   pollingInfo,
   onConfigureAlerts,
-  onToggleConnectionMonitor,
-  showConnectionMonitor = false,
 }: RaceDataHeaderProps) {
   const { raceData } = useRace()
   const [currentTime, setCurrentTime] = useState(new Date())
@@ -79,63 +75,7 @@ export const RaceDataHeader = memo(function RaceDataHeader({
     return () => clearInterval(timer)
   }, [])
 
-  const alertSummary = useMemo(() => {
-    if (!connectionHealth?.alerts || connectionHealth.alerts.length === 0) {
-      return null
-    }
 
-    const hasError = connectionHealth.alerts.some(alert => alert.level === 'error')
-    const hasWarning = connectionHealth.alerts.some(alert => alert.level === 'warning')
-
-    return {
-      severity: hasError ? 'error' : hasWarning ? 'warning' : 'info',
-      count: connectionHealth.alerts.length,
-    }
-  }, [connectionHealth?.alerts])
-
-  const healthStatus = useMemo(() => {
-    if (!connectionHealth) return { status: 'Unknown', color: 'gray' }
-
-    if (alertSummary?.severity === 'error') {
-      return { status: 'Issue', color: 'red' }
-    }
-
-    if (alertSummary?.severity === 'warning') {
-      return { status: 'Attention', color: 'yellow' }
-    }
-
-    if (connectionHealth.isHealthy) {
-      return { status: 'Live', color: 'green' }
-    }
-
-    if (connectionHealth.avgLatency && connectionHealth.avgLatency > 150) {
-      return { status: 'Slow', color: 'yellow' }
-    }
-
-    return { status: 'Monitoring', color: 'gray' }
-  }, [alertSummary, connectionHealth])
-
-  // Memoized calculations to reduce re-renders (move before early return to avoid hook call errors)
-  const formattedTime = useMemo(
-    () => (race?.startTime ? formatRaceTime(race.startTime) : ''),
-    [race?.startTime]
-  )
-  const formattedDistance = useMemo(
-    () => (race?.distance ? formatDistance(race.distance) : null),
-    [race?.distance]
-  )
-  const runnersCount = useMemo(
-    () => entrants.length || race?.runnerCount || 0,
-    [entrants.length, race?.runnerCount]
-  )
-  const scratchedCount = useMemo(
-    () => entrants.filter((e) => e.isScratched).length || 0,
-    [entrants]
-  )
-  const avgLatency = useMemo(
-    () => connectionHealth?.avgLatency || null,
-    [connectionHealth]
-  )
   const pollingSummary = useMemo(() => {
     if (!pollingInfo) {
       return null
@@ -206,6 +146,71 @@ export const RaceDataHeader = memo(function RaceDataHeader({
       totalUpdates: pollingInfo.totalUpdates,
     }
   }, [pollingInfo])
+
+  const healthStatus = useMemo(() => {
+    // Use polling connection status to determine database connection health
+    if (pollingInfo && pollingSummary) {
+      // Check for critical errors first
+      if (pollingInfo.error || pollingInfo.circuitBreakerState === 'open') {
+        return { status: 'DISCONNECTED', color: 'red' }
+      }
+
+      // Check connection state - simple database connection status only
+      switch (pollingInfo.connectionState) {
+        case 'connected':
+          return { status: 'CONNECTED', color: 'green' }
+        case 'connecting':
+          return { status: 'CONNECTING', color: 'yellow' }
+        case 'disconnecting':
+          return { status: 'PAUSING', color: 'yellow' }
+        case 'disconnected':
+        default:
+          return { status: 'DISCONNECTED', color: 'red' }
+      }
+    }
+
+    // Fallback to connection health if polling info not available
+    if (!connectionHealth) return { status: 'UNKNOWN', color: 'gray' }
+
+    if (connectionHealth.isHealthy) {
+      return { status: 'CONNECTED', color: 'green' }
+    }
+
+    return { status: 'CHECKING', color: 'gray' }
+  }, [pollingInfo, pollingSummary, connectionHealth])
+
+  // Memoized calculations to reduce re-renders (move before early return to avoid hook call errors)
+  const formattedTime = useMemo(
+    () => (race?.startTime ? formatRaceTime(race.startTime) : ''),
+    [race?.startTime]
+  )
+  const formattedDistance = useMemo(
+    () => (race?.distance ? formatDistance(race.distance) : null),
+    [race?.distance]
+  )
+  const runnersCount = useMemo(
+    () => entrants.length || race?.runnerCount || 0,
+    [entrants.length, race?.runnerCount]
+  )
+  const scratchedCount = useMemo(
+    () => entrants.filter((e) => e.isScratched).length || 0,
+    [entrants]
+  )
+  const avgLatency = useMemo(() => {
+    // Use polling metrics latency (same as Connection Monitor) for accuracy
+    try {
+      const pollingMetrics = getPollingMetricsSnapshot()
+      if (pollingMetrics && pollingMetrics.totals.averageLatencyMs !== null) {
+        return pollingMetrics.totals.averageLatencyMs
+      }
+    } catch (error) {
+      // Fallback to connectionHealth if polling metrics not available
+      console.warn('Failed to get polling metrics for latency:', error)
+    }
+
+    // Fallback to connectionHealth latency (may be incorrect but better than nothing)
+    return connectionHealth?.avgLatency || null
+  }, [connectionHealth])
   const formattedRaceType = useMemo(() => {
     if (!meeting) return ''
 
@@ -287,49 +292,16 @@ export const RaceDataHeader = memo(function RaceDataHeader({
         <div className="flex items-center justify-center">
           <div className="flex flex-col items-end gap-2 text-right">
             {pollingInfo && pollingSummary && (
-              <>
-                <PollingHealth
-                  isActive={pollingInfo.isActive}
-                  lastUpdate={pollingInfo.lastUpdate}
-                  error={pollingInfo.error ?? undefined}
-                  circuitBreakerState={pollingInfo.circuitBreakerState}
-                  dataFreshness={pollingInfo.dataFreshness}
-                  retryCount={pollingInfo.retryCount}
-                  showNotifications={false}
-                  className="flex items-center justify-end gap-2"
-                />
-                <div className="text-[11px] uppercase tracking-wide text-gray-500">
-                  Last update:{' '}
-                  <span className="font-semibold text-gray-700">
-                    {pollingSummary.lastUpdateLabel}
-                  </span>
-                </div>
-                <div className="flex items-center space-x-2 text-[11px] uppercase tracking-wide text-gray-500">
-                  <span>
-                    Freshness:{' '}
-                    <span
-                      className={`font-semibold ${pollingSummary.freshnessClass}`}
-                    >
-                      {pollingSummary.freshnessLabel}
-                    </span>
-                  </span>
-                  <span className="text-gray-400">•</span>
-                  <span>
-                    Cycles:{' '}
-                    <span className="font-semibold text-gray-700">
-                      {pollingSummary.totalUpdates}
-                    </span>
-                  </span>
-                </div>
-                <div className="text-[11px] uppercase tracking-wide text-gray-500">
-                  Connection:{' '}
-                  <span
-                    className={`font-semibold ${pollingSummary.connectionClass}`}
-                  >
-                    {pollingSummary.connectionLabel}
-                  </span>
-                </div>
-              </>
+              <PollingHealth
+                isActive={pollingInfo.isActive}
+                lastUpdate={pollingInfo.lastUpdate}
+                error={pollingInfo.error ?? undefined}
+                circuitBreakerState={pollingInfo.circuitBreakerState}
+                dataFreshness={pollingInfo.dataFreshness}
+                retryCount={pollingInfo.retryCount}
+                showNotifications={false}
+                className="flex items-center justify-end gap-2"
+              />
             )}
             {!pollingInfo && (
               <div className="bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg px-2 py-1 text-center text-gray-500 font-bold text-xs">
@@ -383,47 +355,18 @@ export const RaceDataHeader = memo(function RaceDataHeader({
               >
                 {healthStatus.status}
               </span>
-              {alertSummary && (
-                <span
-                  className={`text-xs px-1.5 py-0.5 rounded font-semibold ${
-                    alertSummary.severity === 'error'
-                      ? 'bg-red-100 text-red-700'
-                      : alertSummary.severity === 'warning'
-                      ? 'bg-yellow-100 text-yellow-700'
-                      : 'bg-blue-100 text-blue-700'
-                  }`}
-                >
-                  {alertSummary.count} alert
-                  {alertSummary.count > 1 ? 's' : ''}
-                </span>
-              )}
             </div>
           </div>
 
           <div className="flex items-center gap-1">
-            {/* Connection Monitor Toggle (Development Only) */}
-            {showDevelopmentFeatures() && onToggleConnectionMonitor && (
-              <button
-                onClick={onToggleConnectionMonitor}
-                className={`text-xs px-2 py-1 rounded transition-colors ${
-                  showConnectionMonitor
-                    ? 'bg-blue-200 text-blue-700 hover:bg-blue-300'
-                    : 'bg-gray-200 text-gray-600 hover:bg-gray-300 hover:text-gray-700'
-                }`}
-                title="Toggle connection monitor"
-                aria-label="Toggle connection monitoring panel"
-              >
-                🔧
-              </button>
-            )}
-
             {/* Alerts Configuration Button */}
             {onConfigureAlerts && (
               <button
                 onClick={onConfigureAlerts}
-                className="text-xs px-2 py-1 rounded transition-colors bg-gray-200 text-gray-600 hover:bg-gray-300 hover:text-gray-700"
+                className="text-lg px-2 py-1 rounded transition-colors bg-gray-800 text-white hover:bg-gray-900"
                 title="Configure indicators"
                 aria-label="Open indicators configuration"
+                style={{ fontSize: '16px' }}
               >
                 ⚙️
               </button>
@@ -491,7 +434,7 @@ export const RaceDataHeader = memo(function RaceDataHeader({
                 : 'text-green-800'
             }`}
           >
-            {avgLatency === null ? '—' : `${avgLatency.toFixed(2)}ms`}
+            {avgLatency === null ? '—' : `${avgLatency.toFixed(0)}ms`}
           </div>
         </div>
       </div>

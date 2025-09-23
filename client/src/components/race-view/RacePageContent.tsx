@@ -140,7 +140,8 @@ export function RacePageContent() {
   const currentRace = realtimeData.race || raceData.race
   const currentEntrants = realtimeData.entrants || raceData.entrants || []
   const currentMeeting = realtimeData.meeting || raceData.meeting
-  const currentPoolData = realtimeData.poolData
+  // Persist pool data - use real-time data when available, but maintain persistence
+  const currentPoolData = realtimeData.poolData || undefined
 
   // Build results data from persistent race data or real-time updates
   // Allow interim results to display even without dividends data
@@ -224,8 +225,6 @@ export function RacePageContent() {
           connectionHealth={realtimeData.getConnectionHealth()}
           pollingInfo={pollingInfo}
           onConfigureAlerts={() => setIsAlertsModalOpen(true)}
-          onToggleConnectionMonitor={() => setShowConnectionMonitor(!showConnectionMonitor)}
-          showConnectionMonitor={connectionMonitorEnabled && showConnectionMonitor}
         />
       </header>
 

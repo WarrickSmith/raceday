@@ -44,10 +44,7 @@ function formatLatency(latencyMs: number | null | undefined): string {
     return '—'
   }
 
-  if (latencyMs >= 1000) {
-    return `${(latencyMs / 1000).toFixed(2)}s`
-  }
-
+  // Always show milliseconds for consistency with race header
   return `${latencyMs.toFixed(0)}ms`
 }
 
@@ -113,6 +110,25 @@ function getEventAccent(type: PollingMetricsSnapshot['events'][number]['type']):
   }
 }
 
+function getLatencyColor(latencyMs: number | null): string {
+  if (!latencyMs) return 'text-gray-600'
+  if (latencyMs <= 100) return 'text-green-600'
+  if (latencyMs <= 300) return 'text-yellow-600'
+  return 'text-red-600'
+}
+
+function getSuccessRateColor(rate: number): string {
+  if (rate >= 0.95) return 'text-green-600'
+  if (rate >= 0.8) return 'text-yellow-600'
+  return 'text-red-600'
+}
+
+function getErrorRateColor(rate: number): string {
+  if (rate <= 0.05) return 'text-green-600'
+  if (rate <= 0.15) return 'text-yellow-600'
+  return 'text-red-600'
+}
+
 export function ConnectionMonitor({ isOpen, onToggle, className = '' }: ConnectionMonitorProps) {
   const devEnabled = showDevelopmentFeatures()
   const [metrics, setMetrics] = useState<PollingMetricsSnapshot | null>(null)
@@ -174,13 +190,13 @@ export function ConnectionMonitor({ isOpen, onToggle, className = '' }: Connecti
           onClick={onToggle}
           className="flex items-center gap-3 text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors"
         >
-          <span className="text-xs">🔧</span>
+          <span className="text-lg bg-gray-800 text-white px-1.5 py-0.5 rounded" style={{ fontSize: '16px' }}>🔧</span>
           <span>Polling Monitor</span>
           {metrics && (
             <span className="flex items-center gap-3 text-xs font-mono text-gray-500">
               <span className={errorRateClass}>{formatPercentage(errorRate)} err</span>
-              <span className="text-blue-600">
-                Δ {formatLatency(metrics.schedule.lastActualIntervalMs)}
+              <span className={`${getLatencyColor(metrics.totals.averageLatencyMs)}`}>
+                {formatLatency(metrics.totals.averageLatencyMs)} avg
               </span>
             </span>
           )}
@@ -208,183 +224,151 @@ export function ConnectionMonitor({ isOpen, onToggle, className = '' }: Connecti
       </div>
 
       {isOpen && (
-        <div className="p-4 space-y-4">
+        <div className="p-2 space-y-1">
           {metrics ? (
             <>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="p-3 bg-white rounded border">
-                  <div className="text-xs uppercase text-gray-500">Total Requests</div>
-                  <div className="text-2xl font-bold text-gray-900">{metrics.totals.requests}</div>
-                </div>
-                <div className="p-3 bg-white rounded border">
-                  <div className="text-xs uppercase text-gray-500">Success Rate</div>
-                  <div className="text-2xl font-bold text-green-600">{formatPercentage(successRate)}</div>
-                </div>
-                <div className="p-3 bg-white rounded border">
-                  <div className="text-xs uppercase text-gray-500">Error Rate</div>
-                  <div className={`text-2xl font-bold ${errorRateClass}`}>{formatPercentage(errorRate)}</div>
-                </div>
-                <div className="p-3 bg-white rounded border">
-                  <div className="text-xs uppercase text-gray-500">Avg Latency</div>
-                  <div className="text-2xl font-bold text-blue-600">
-                    {formatLatency(metrics.totals.averageLatencyMs)}
+              {/* Core Metrics - Horizontal Layout */}
+              <div className="bg-white rounded border p-2">
+                <div className="flex flex-wrap items-center gap-6 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs uppercase text-gray-500 font-medium">Requests:</span>
+                    <span className="font-semibold text-gray-900">{metrics.totals.requests}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs uppercase text-gray-500 font-medium">Success:</span>
+                    <span className={`font-semibold ${getSuccessRateColor(successRate)}`}>
+                      {formatPercentage(successRate)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs uppercase text-gray-500 font-medium">Errors:</span>
+                    <span className={`font-semibold ${getErrorRateColor(errorRate)}`}>
+                      {formatPercentage(errorRate)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs uppercase text-gray-500 font-medium">Latency:</span>
+                    <span className={`font-semibold ${getLatencyColor(metrics.totals.averageLatencyMs)}`}>
+                      {formatLatency(metrics.totals.averageLatencyMs)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs uppercase text-gray-500 font-medium">Uptime:</span>
+                    <span className="font-semibold text-blue-600">{formatDuration(metrics.uptimeMs)}</span>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white rounded border p-4 space-y-4">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              {/* Schedule & Timing - Compact Layout */}
+              <div className="bg-white rounded border p-2">
+                <div className="flex flex-wrap items-center gap-4 text-sm">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs uppercase text-gray-500">Cadence</span>
-                    <span className={`px-2 py-1 rounded text-xs font-semibold ${complianceStyle.className}`}>
+                    <span className="text-xs uppercase text-gray-500 font-medium">Cadence:</span>
+                    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${complianceStyle.className}`}>
                       {complianceStyle.label}
                     </span>
                   </div>
-                  <div className="text-xs text-gray-600">
-                    Uptime <span className="font-semibold text-gray-800">{formatDuration(metrics.uptimeMs)}</span>
-                  </div>
                   {alertSummary && (
-                    <div className={`px-2 py-1 rounded text-xs font-semibold ${getAlertClass(alertSummary.severity)}`}>
-                      {alertSummary.count} active alert{alertSummary.count === 1 ? '' : 's'}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs uppercase text-gray-500 font-medium">Alerts:</span>
+                      <span className={`px-2 py-0.5 rounded text-xs font-semibold ${getAlertClass(alertSummary.severity)}`}>
+                        {alertSummary.count}
+                      </span>
                     </div>
                   )}
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs text-gray-600">
-                  <div>
-                    Target Interval
-                    <div className="font-semibold text-gray-800">
-                      {formatLatency(metrics.schedule.targetIntervalMs)}
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs uppercase text-gray-500 font-medium">Target:</span>
+                    <span className="font-semibold text-blue-600">{formatLatency(metrics.schedule.targetIntervalMs)}</span>
                   </div>
-                  <div>
-                    Scheduled Interval
-                    <div className="font-semibold text-gray-800">
-                      {formatLatency(metrics.schedule.scheduledIntervalMs)}
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs uppercase text-gray-500 font-medium">Actual:</span>
+                    <span className="font-semibold text-gray-900">{formatLatency(metrics.schedule.lastActualIntervalMs)}</span>
                   </div>
-                  <div>
-                    Last Interval
-                    <div className="font-semibold text-gray-800">
-                      {formatLatency(metrics.schedule.lastActualIntervalMs)}
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs uppercase text-gray-500 font-medium">Duration:</span>
+                    <span className="font-semibold text-gray-900">{formatLatency(metrics.schedule.lastCycleDurationMs)}</span>
                   </div>
-                  <div>
-                    Background Multiplier
-                    <div className="font-semibold text-gray-800">
-                      ×{metrics.schedule.backgroundMultiplier.toFixed(2)}
-                    </div>
-                  </div>
-                  <div>
-                    Last Cycle Duration
-                    <div className="font-semibold text-gray-800">
-                      {formatLatency(metrics.schedule.lastCycleDurationMs)}
-                    </div>
-                  </div>
-                  <div>
-                    Next Run
-                    <div className="font-semibold text-gray-800">
-                      {formatTimestamp(metrics.schedule.nextRunAt)}
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs uppercase text-gray-500 font-medium">Next:</span>
+                    <span className="font-semibold text-gray-900">{formatTimestamp(metrics.schedule.nextRunAt)}</span>
                   </div>
                 </div>
               </div>
 
               {metrics.alerts.length > 0 && (
-                <div className="bg-white rounded border">
-                  <div className="px-3 py-2 bg-gray-50 border-b text-sm font-medium text-gray-700">
-                    Active Alerts
-                  </div>
-                  <ul className="divide-y divide-gray-100">
+                <div className="bg-white rounded border p-2">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-xs uppercase text-gray-500 font-medium">Active Alerts:</span>
                     {metrics.alerts.map(alert => (
-                      <li key={alert.id} className="px-3 py-2 text-sm flex items-start gap-3">
-                        <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${getAlertClass(alert.level)}`}>
+                      <div key={alert.id} className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${getAlertClass(alert.level)}`}>
                           {alert.level.toUpperCase()}
                         </span>
-                        <div>
-                          <div className="font-semibold text-gray-800">{alert.message}</div>
-                          {alert.detail && (
-                            <div className="text-xs text-gray-500">{alert.detail}</div>
-                          )}
-                        </div>
-                      </li>
+                        <span className="text-sm font-medium text-gray-800">{alert.message}</span>
+                        {alert.detail && (
+                          <span className="text-xs text-gray-500">({alert.detail})</span>
+                        )}
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 </div>
               )}
 
-              <div className="bg-white rounded border">
-                <div className="px-3 py-2 bg-gray-50 border-b text-sm font-medium text-gray-700">
-                  Endpoint Performance
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-xs text-left">
-                    <thead className="bg-gray-100 text-gray-600 uppercase tracking-wide">
-                      <tr>
-                        <th className="px-3 py-2 font-semibold">Endpoint</th>
-                        <th className="px-3 py-2 font-semibold">Requests</th>
-                        <th className="px-3 py-2 font-semibold">Errors</th>
-                        <th className="px-3 py-2 font-semibold">Avg Latency</th>
-                        <th className="px-3 py-2 font-semibold">p95 Latency</th>
-                        <th className="px-3 py-2 font-semibold">Last Success</th>
-                        <th className="px-3 py-2 font-semibold">Last Error</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {sortedEndpoints.length === 0 && (
+              {/* Endpoint Performance - Ultra Compact Table */}
+              {sortedEndpoints.length > 0 && (
+                <div className="bg-white rounded border">
+                  <div className="px-3 py-1.5 bg-gray-50 border-b text-xs font-medium text-gray-700 uppercase tracking-wide">
+                    Endpoint Performance
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-xs text-left">
+                      <thead className="bg-gray-50 text-gray-600 uppercase tracking-wide">
                         <tr>
-                          <td className="px-3 py-4 text-center text-gray-500" colSpan={7}>
-                            No polling activity recorded yet.
-                          </td>
+                          <th className="px-2 py-1 font-semibold">Endpoint</th>
+                          <th className="px-2 py-1 font-semibold">Req</th>
+                          <th className="px-2 py-1 font-semibold">Err%</th>
+                          <th className="px-2 py-1 font-semibold">Latency</th>
+                          <th className="px-2 py-1 font-semibold">Last Success</th>
                         </tr>
-                      )}
-                      {sortedEndpoints.map(endpoint => {
-                        const errorClass = endpoint.errorRate > 0.1
-                          ? 'text-red-600'
-                          : endpoint.errorRate > 0.05
-                          ? 'text-yellow-600'
-                          : 'text-green-600'
-
-                        return (
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {sortedEndpoints.map(endpoint => (
                           <tr key={endpoint.key} className="text-gray-700">
-                            <td className="px-3 py-2 font-semibold text-gray-800">{endpoint.label}</td>
-                            <td className="px-3 py-2">{endpoint.requestCount}</td>
-                            <td className={`px-3 py-2 font-mono ${errorClass}`}>
+                            <td className="px-2 py-1 font-semibold text-gray-800 text-xs">{endpoint.label}</td>
+                            <td className="px-2 py-1 text-xs">{endpoint.requestCount}</td>
+                            <td className={`px-2 py-1 font-semibold text-xs ${getErrorRateColor(endpoint.errorRate)}`}>
                               {formatPercentage(endpoint.errorRate)}
                             </td>
-                            <td className="px-3 py-2">{formatLatency(endpoint.averageLatencyMs)}</td>
-                            <td className="px-3 py-2">{formatLatency(endpoint.p95LatencyMs)}</td>
-                            <td className="px-3 py-2">{formatTimestamp(endpoint.lastSuccessAt)}</td>
-                            <td className="px-3 py-2">{formatTimestamp(endpoint.lastErrorAt)}</td>
+                            <td className={`px-2 py-1 font-semibold text-xs ${getLatencyColor(endpoint.averageLatencyMs)}`}>
+                              {formatLatency(endpoint.averageLatencyMs)}
+                            </td>
+                            <td className="px-2 py-1 text-xs">{formatTimestamp(endpoint.lastSuccessAt)}</td>
                           </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {metrics.events.length > 0 && (
                 <div className="bg-white rounded border">
-                  <div className="px-3 py-2 bg-gray-50 border-b text-sm font-medium text-gray-700 flex items-center justify-between">
-                    <span>Recent Activity</span>
-                    <span className="text-xs text-gray-500">
-                      Showing last {metrics.events.length} event{metrics.events.length === 1 ? '' : 's'}
-                    </span>
+                  <div className="px-2 py-1.5 bg-gray-50 border-b text-xs font-medium text-gray-700 uppercase tracking-wide">
+                    Recent Activity ({metrics.events.length} event{metrics.events.length === 1 ? '' : 's'})
                   </div>
-                  <div className="max-h-56 overflow-y-auto divide-y divide-gray-100">
-                    {metrics.events.map((event, index) => (
+                  <div className="max-h-32 overflow-y-auto divide-y divide-gray-100">
+                    {metrics.events.slice().reverse().map((event, index) => (
                       <div
                         key={`${event.timestamp}-${index}`}
-                        className="px-3 py-2 text-xs flex flex-col md:flex-row md:items-center md:gap-3"
+                        className="px-2 py-1 text-xs flex items-center gap-2"
                       >
-                        <span className="font-mono text-gray-400 w-24">{formatTimestamp(event.timestamp)}</span>
-                        <span className={`uppercase tracking-wide font-semibold ${getEventAccent(event.type)}`}>
+                        <span className="font-mono text-gray-400 w-16 text-[10px]">{formatTimestamp(event.timestamp)}</span>
+                        <span className={`uppercase tracking-wide font-semibold text-[10px] ${getEventAccent(event.type)}`}>
                           {event.type}
                         </span>
-                        <span className="text-gray-700 md:flex-1">{event.message}</span>
+                        <span className="text-gray-700 flex-1 text-[11px]">{event.message}</span>
                         {event.details && (
-                          <span className="text-[11px] text-gray-500">
+                          <span className="text-[10px] text-gray-500">
                             {Object.entries(event.details)
                               .map(([key, value]) => `${key}: ${String(value)}`)
                               .join(', ')}
