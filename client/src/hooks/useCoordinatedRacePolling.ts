@@ -445,7 +445,6 @@ export function useCoordinatedRacePolling(
       }))
 
       let timeoutId: ReturnType<typeof setTimeout> | undefined
-      // Track if this abort was intentional (cleanup or timeout)
       let intentionalAbort = false
 
       try {
@@ -462,10 +461,8 @@ export function useCoordinatedRacePolling(
 
           if (currentEntrants.length === 0) {
             logger.warn(`${source} request skipped - no entrants available`)
-            // Record as successful but with no data since this is intentional
             recordPollingSuccess({ raceId, endpoint: source, durationMs: 0 })
 
-            // Update coordination state to mark as successful
             setCoordinationState(prev => ({
               ...prev,
               successfulSources: new Set([...prev.successfulSources, source]),
@@ -488,10 +485,8 @@ export function useCoordinatedRacePolling(
           const entrantIds = currentEntrants.map(entrant => entrant.entrantId || entrant.$id).filter(Boolean)
           if (entrantIds.length === 0) {
             logger.warn(`${source} request skipped - no valid entrant IDs found`)
-            // Record as successful but with no data since this is intentional
             recordPollingSuccess({ raceId, endpoint: source, durationMs: 0 })
 
-            // Update coordination state to mark as successful
             setCoordinationState(prev => ({
               ...prev,
               successfulSources: new Set([...prev.successfulSources, source]),
@@ -615,19 +610,16 @@ export function useCoordinatedRacePolling(
         const fetchError = error instanceof Error ? error : new Error(`Unknown error in ${source}`)
         const isAbortError = fetchError.name === 'AbortError' || fetchError.message.includes('aborted')
 
-        // Check if this was an intentional abort (timeout or cleanup)
         if (isAbortError && intentionalAbort) {
           logger.debug(`${source} request intentionally aborted (timeout or cleanup)`)
           return null
         }
 
-        // Check if this was a cleanup abort (component unmounting)
         if (isAbortError && !mountedRef.current) {
           logger.debug(`${source} request aborted during component cleanup`)
           return null
         }
 
-        // This is an unexpected abort or other error - treat as failure
         recordPollingError({ raceId, endpoint: source, error: fetchError })
 
         setCoordinationState(prev => ({
